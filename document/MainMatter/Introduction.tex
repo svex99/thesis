@@ -1,2 +1,46 @@
-\chapter*{Introducción}\label{chapter:introduction}
-\addcontentsline{toc}{chapter}{Introducción}
+\chapter{Introducción}\label{chapter:introduction}
+% \addcontentsline{toc}{chapter}{Introducción}
+
+En la actualidad, con el auge del internet y la web, la mayor parte de las personas accede a contenido y servicios de forma digital. Consecuencia de ello, las empresas e instituciones se ven obligadas a mover sus operaciones a la web para acceder a una mayor audiencia. Con vista al futuro no hay pronósticos que la tendencia sea a la contraria. Aún quedan países a nivel mundial, principalmente en vías de desarrollo, que no han adoptado el espacio digital, ya sea por motivos económicos, políticos, o de otra índole.
+
+Uno de los pilares en el funcionamiento del internet es el Sistema de Nombres de Dominio (DNS, por sus siglas en inglés). Este sustenta el enrutamiento de las peticiones de millones de usuarios a computadoras (o \textit{clusters} de estas), sin la ardua tarea de memorizar cada una de las direcciones IP, las cuales pueden cambiar. Dicho servicio es mantenido por administradores y personas técnicas a nivel global y local en las redes privadas. En redes de cualquier tamaño dicho servicio facilita el acceso para las personas a un \textit{host} específico de manera sencilla.
+
+Para la gestión de servidores DNS existen diversos softwares adoptados. DNSimple, PowerDNS, CoreDNS, DNS Made Easy y BIND 9 son algunos de los que están disponibles. La mayoría de estos requieren de un experto para su configuración, otros requieren del pago de una licencia y no son de código abierto. Una ventaja que poseen algunos es la disponibilidad de una API que permite automatizar procesos de configuración. Actualmente solo los servicios ubicados en la nube disponen de una API y/o interfaz de usuario para facilitar la configuración.
+
+\section{Motivación}
+
+En el conjunto de soluciones actuales se puede dividir en dos grupos. Un primer grupo que es de código abierto, pero requiere de un alto nivel técnico para su configuración, además de no poseer una interfaz de usuario, ya sea web o \textit{desktop}, ni dispone de una API HTTP. Un segundo basado en la nube, que sí ofrece su servicio vía API y generalmente con una interfaz web amigable, pero son de pago y código cerrado. Dentro de los segundos servicios, existen algunos como Amazon Route 53 y Google Cloud DNS que se encuentran vinculados a un entorno que ofrece más soluciones a la hora de desplegar un sistema, pero los costos de uso no son despreciables.
+
+Los proyectos de código abierto ofrecen soluciones altamente adaptables para su despliegue y reciben contribuciones de la comunidad que las convierten en un producto  de software sólido. La existencia de una API e interfaz de usuario compatible con algunos de los servidores DNS de código abierto sería de mucha utilidad para alcanzar el nivel de funcionalidad de servicios de pago basados en la nube.
+
+\section{Antecedentes}
+
+Hablar sobre la tesis anterior que trabajo sobre este tema u otro trabajo relacionado en el nodo uh.
+
+\section{Problemática}
+
+Los DNS actualmente en la Universidad de La Habana utilizan BIND 9, el cual es el software representativo como servidor DNS, sin embargo, actualmente toda gestión de añadir un dominio comienza con una llamada telefónica, a veces un papel a firmar, etc. Por otra parte, solo un administrador experimentado conoce trabajar con BIND 9 ya que no ofrece una interfaz amigable con la cual trabajar para lo que necesitaría de una interfaz web.
+
+\section{Hipótesis}
+
+\section{Objetivos}
+Esta tesis se propone como objetivos:
+\begin{itemize}
+    \item Investigación sobre el estado del arte en temas: PgSQL, DNS, BIND 9, Golang Gin, Vue.js, Ciberseguridad.
+    \item Implementación de CRUDs para dominios, subdominios y tipos de registros, expuesto en servicio REST.
+    \item Implementación algoritmo de escritura de configuración DNS en sintaxis BIND 9.
+\end{itemize}
+
+% \subsection{General}
+
+% \subsection{Específicos}
+
+\section{Propuesta de Solución}
+
+Se propone como solución la implementacíón de \textit{parsers} para los archivos de zona y configuración que utiliza BIND 9, esto permite tanto obtener la información desde la base de datos de BIND 9, como escribir a ella de forma estructurada.
+
+Hacer uso de una arquitectura de microservicios con tres servicios fundamentales. Una API REST implementada en Go y Gin la cual mantiene en memoria la configuración de BIND 9,  y procesa las solicitudes para actualizar dicha base de datos. Como segundo servicio una interfaz web (SPA), creada con Vue, con renderizado del lado del cliente que permita, a través de la API, el acceso a la configuración de BIND 9 de forma sencilla. Finalmente el servicio de BIND 9, que hace función de servidor DNS autoritario. Estos servicios son ejecutados sobre contenedores de Docker y desplegados con \verb+docker-compose+. Ambos servicios, la API y BIND 9 comparten el mismo volumen donde es almacenada la configuración del servidor DNS y cualquier acción directa del primero sobre el segundo es realizada a través del servicio de Docker.
+
+Además se ofrece uun método para extender el sistema con nuevos tipos de registros de forma relativamente sencilla. De esta forma, hacer posible aumentar la gramática del \textit{parser} de los archivos de zona, y aceptar nuevos registros que puedan ser añadidos al estándar.
+
+\section{Estructura de la Tesis}
