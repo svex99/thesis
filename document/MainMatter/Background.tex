@@ -2,11 +2,19 @@
 
 \section{DNS}
 
-El objetivo principal del Sistema de Nombres de Dominio es el acceso a recursos en la red a través de un espacio de nombres. Anterior a este, el mapeo del nombre de cada \textit{host} a su dirección era mantenido por el Centro de Información de Red (NIC, por sus siglas en inglés) en un archivo \verb+HOST.txt+. Dicho archivo era clonado por todos los \textit{hosts}, lo que traía como consecuencia un alto consumo de ancho de banda y poca escalabilidad ante el aumento del número de \textit{hosts}.
+El objetivo principal del Sistema de Nombres de Dominio es el acceso a recursos en la red a través de un espacio de nombres. Anterior a este, el mapeo del nombre de cada \textit{host} a su dirección era mantenido por el Centro de Información de Red (NIC, por sus siglas en inglés) en un archivo nombrado \verb+HOST.txt+. En sistemas de tipo Linux podemos encontrarlo en la ruta \verb+/etc/hosts+, mientras que en Windows esta ubicado en \verb+C:\Windows\System32\Drivers\etc\hosts+ pues este aún se consulta antes de resolver un dominio con un servidor DNS. Dicho archivo era clonado por todos los \textit{hosts}, lo que traía como consecuencia un alto consumo de ancho de banda y poca escalabilidad ante el aumento del número de dispositivos de cómputo.
 
-Se hace necesario tener una alternativa a dicho mecanismo. DNS como base de datos distribuida, jerárquica y altamente disponible soluciona dicho problema, además de aportar nuevas funcionalidades. DNS tiene una estructura arbórea, donde cada nodo tiene un padre y una etiqueta de 1 a 63 caracteres de longitud, excepto el nodo raíz que es su propio padre y contiene la cadena vacía [\cite{Vixie_2007}]. Un nombre de dominio puede verse como un nodo en este contexto, mientras que, un nombre de dominio completamente calificado (FQDN, por sus siglas en inglés) es una representación de nodos, separados por un punto (\verb+.+). Por ejemplo, \verb+www.example.com+ es el FQDN para el dominio \verb+www+, cuyo padre es \verb+example+, abuelo \verb+com+ y bisabuelo el nodo raíz.
+Se hace necesario tener una alternativa a dicho mecanismo. DNS como base de datos distribuida, jerárquica y altamente disponible soluciona dicho problema, además de aportar nuevas funcionalidades. DNS tiene una estructura arbórea, donde cada nodo tiene un padre y una etiqueta de 1 a 63 caracteres de longitud, excepto el nodo raíz que es su propio padre y contiene la cadena vacía [\cite{Vixie_2007}]. Un nombre de dominio puede verse como un nodo en este contexto, mientras que, un nombre de dominio completamente calificado (FQDN, por sus siglas en inglés) es una representación de nodos, separados por un punto (\verb+.+). Por ejemplo, \verb+www.example.com+ es el FQDN para el dominio \verb+www+, cuyo padre es \verb+example+, abuelo \verb+com+ (TLD, del inglés \textit{Top Level Domain}) y bisabuelo el nodo raíz.
 
-Los nodos (dominios) son agrupados en zonas, las cuales pueden considerarse un área dentro del espacio de nombres. Siendo cada zona administrada por una organización o administrador determinado. La zonas son servidas por servidores de autoridad, que pueden ser \textbf{primarios} (si la información de la zona tiene su origen fuera de DNS) o \textbf{secundarios} (la información tiene como origen un servidor primario, vía una transferencia de zona) [\cite{Vixie_2007}].
+En la arquitectura actual encontramos lo dominios de más alto nivel (TLD) un nivel por debajo del nodo raíz. Estos son directamente gestionados por la IANA (\textit{Internet Assigned Numbers Authority}) y la lista se encuentra en la base de datos de la zona raíz\footnote{\url{https://www.iana.org/domains/root/db}}. La administración de los TLD es delegada a empresas y organizaciones en coordinación con la IANA para su mantenibilidad.
+
+\begin{figure}[!ht]
+    \centering
+    \includegraphics[width=\linewidth]{draws/dns-arch.png}
+    \caption{Arquitectura de DNS.}
+\end{figure}
+
+Los nodos (dominios) son agrupados en zonas, las cuales pueden considerarse un área dentro del espacio de nombres. Siendo cada zona administrada por una organización o administrador determinado. La zonas son manejadas por servidores de autoridad, que pueden ser \textbf{primarios} (si la información de la zona tiene su origen fuera de DNS) o \textbf{secundarios} (la información tiene como origen un servidor primario, vía una transferencia de zona) [\cite{Vixie_2007}].
 
 Cada nodo puede poseer registros (en inglés \textit{resource records} (RRs)). Estos son los que contienen toda la información DNS en dependencia de su nombre, tipo, clase o datos [\cite{rfc_1035}]. Cada RR tiene un TTL (\textit{time to live}), que indica que tiempo puede estar almacenada la información del registro en un servidor secundario, después de que este llegue a cero es necesario volver a obtener el registro del servidor autoritario primario.
 
@@ -16,7 +24,7 @@ Una consulta DNS es resuelta por los diferentes servidores que componen la jerar
 
 \begin{figure}[!ht]
     \centering
-    \includegraphics[width=\linewidth]{draws/dns-arch.png}
+    \includegraphics[width=\linewidth]{draws/dns-query.png}
     \caption{Resolución de una consulta DNS.}
 \end{figure}
 
@@ -37,7 +45,7 @@ Los registros DNS han ido evolucionando a lo largo de los años desde el diseño
 Algunos de los tipos de registros más comunes son mostrados a continuación con su correspondiente uso.
 
 \begin{itemize}
-    \item \verb+SOA+: indica que la zona es el inicio de autoridad para el dominio, y define parámetros como contacto del administrador, un serial para indicar cambios en la zona, el valor mínimo de TTL para los registros exportados, etc.
+    \item \verb+SOA+: indica que la zona es el inicio de autoridad para el dominio, y define parámetros como contacto del administrador, un serial para indicar cambios en la zona, el valor mínimo de TTL para los registros exportados y otros valores de interés para los servidores secundarios.
     \item \verb+NS+: indica el servidor de nombres autoritario para el dominio.
     \item \verb+A+ y \verb+AAAA+: mapea direcciones IP (IPv4 e IPv6) a nombres de dominio.
     \item \verb+MX+: contiene información del host que se encarga del intercambio de correo, posee un campo para indicar la prioridad para cada host.\
@@ -63,9 +71,9 @@ Otras vulnerabilidades de DNS son mostradas en la sección siguiente y específi
 
 \section{BIND 9}
 
-BIND 9 (Berkeley Internet Name Domain versión 9) en un software de código abierto, mantenido oficialmente por el Internet Systems Consortium (ISC). Actualmente cuenta con tres ramas principales: Estable, Soporte-Extendido y Desarrollo.
+BIND 9 (Berkeley Internet Name Domain versión 9) en un software de código abierto, mantenido oficialmente por el Internet Systems Consortium (ISC). Actualmente cuenta con tres ramas principales: Estable, Soporte-Extendido y Desarrollo. Esta implementado en C y su código disponible en GitLab\footnote{https://gitlab.isc.org/isc-projects/bind9}. Este es de los más consolidados en el mercado actual de soluciones DNS [\cite{dns-survey}; \cite{bind-usage}], con su surgimiento a inicios de la década de 1980 en la Universidad de California en Berkeley.
 
-Posee un amplio abanico de características empleadas en el sistema DNS actual y es muy utilizado al ser primero en su tipo. Este ofrece tanto un servidor DNS autoritario como un DNS \textit{resolver}. Ambos siguen prácticas de seguridad y ofrecen funcionalidades que garantizan su correcto funcionamiento al realizar el despliegue en cualquier red.
+Posee un amplio abanico de características empleadas en el sistema DNS actual y es muy utilizado al ser primero en su tipo. Este ofrece tanto un servidor DNS autoritario como un DNS \textit{resolver}, así como un grupo de herramientas adicionales para la gestión del servicio DNS. Ambos servidores siguen prácticas de seguridad y ofrecen funcionalidades que garantizan su correcto funcionamiento al realizar el despliegue en cualquier red.
 
 \subsection{DNS Autoritario}
 
@@ -77,7 +85,7 @@ Las consultas de tipo \verb+ANY+ pueden obtener más información de la que env�
 
 Ante cambios en la configuración de las zonas es posible reiniciar el servidor usando la herramienta de línea de comandos \verb+rndc+ (\textit{remote name daemon control}). \verb+rndc+ permite cargar todas las zonas o especificar cuál, lo cual puede mejorar el tiempo de recarga de la configuración. Además se encarga de remover las zonas eliminadas al recargar la configuración. Esto es la forma más segura de efectuar el proceso, no es necesario reiniciar el servicio y la nueva información de las zonas es enviada a los servidores secundarios si existen.
 
-\verb+dnstap+ es una solución de código abierto para capturar y \textit{loguear} tráfico DNS. Es soportado por varios servidores DNS de código abierto, entre ellos BIND. Permite capturar el tráfico tanto de consultas como de respuestas del servidor con un impacto menor al \textit{logging} nativo de BIND. La información capturada es almacenada en formato binario, para lo que se ofrece para presentarla de forma legible la herramienta \verb+dnstap-read+. 
+\verb+dnstap+\footnote{\url{https://github.com/dnstap}} es una solución de código abierto para capturar y \textit{loguear} tráfico DNS. Es soportado por varios servidores DNS de código abierto, entre ellos BIND. Permite capturar el tráfico tanto de consultas como de respuestas del servidor con un impacto menor al \textit{logging} nativo de BIND. La información capturada es almacenada en formato binario, por lo que se ofrece para presentarla de forma legible la herramienta \verb+dnstap-read+. 
 
 \subsection{DNS Resolver}
 
@@ -91,31 +99,45 @@ Una característica única en BIND es la posibilidad de configurar diferentes vi
 
 \subsection{Alternativas}
 
-Como fue mencionado en la Motivación, existen alternativas a BIND 9. En la tabla a continuación se muestra una relación de estas.
+Como fue mencionado en la Motivación, existen alternativas a BIND 9. En la tabla a continuación se muestra alguna de ellas.
 
 \begin{table}[!ht]
     \centering
-    \begin{tabular}{|l|l|l|l|l|l|}
+    \begin{tabular}{|l|c|c|c|c|c|}
     \hline
-        Software & Pago & API & UI & Nube & Repositorio \\ \hline
-        BIND 9 & no & no & no & no & https://gitlab.isc.org/isc-projects/bind9 \\ \hline
-        PowerDNS & no & sí & no & no & https://github.com/PowerDNS/pdns \\ \hline
-        CoreDNS & no & no & no & no & https://github.com/coredns/coredns \\ \hline
-        Knot & no & no & no & no & https://gitlab.nic.cz/knot/knot-dns.git \\ \hline
-        Amazon Route 53 & sí & sí & ? & sí & no \\ \hline
-        DNS Made Easy & sí & sí & sí & sí & no \\ \hline
-        Google Cloud DNS & sí & sí & sí & sí & no \\ \hline
-        DNSimple & sí & sí & sí & sí & no \\ \hline
-        NS1 & sí & sí & sí & sí & no \\ \hline
+        Software & Pago & API HTTP & UI & Nube & Código Abierto \\ \hline
+        BIND 9 & $\times$ & $\times$ & $\times$ & $\times$ & \checkmark \\ \hline
+        PowerDNS & $\times$ & \checkmark & $\times$ & $\times$ & \checkmark \\ \hline
+        CoreDNS & $\times$ & $\times$ & $\times$ & $\times$ & \checkmark \\ \hline
+        Knot & $\times$ & $\times$ & $\times$ & $\times$ & \checkmark \\ \hline
+        Amazon Route 53 & \checkmark & \checkmark & \checkmark & \checkmark & $\times$ \\ \hline
+        DNS Made Easy & \checkmark & \checkmark & \checkmark & \checkmark & $\times$ \\ \hline
+        Google Cloud DNS & \checkmark & \checkmark & \checkmark & \checkmark & $\times$ \\ \hline
+        DNSimple & \checkmark & \checkmark & \checkmark & \checkmark & $\times$ \\ \hline
+        NS1 & \checkmark & \checkmark & \checkmark & \checkmark & $\times$ \\ \hline
     \end{tabular}
     \caption{Comparativa de soluciones DNS.}
     \label{dns-comparative}
 \end{table}
 
-Tanto los servidores de código cerrado, como los de código abierto son mantenidos por instituciones. Los primeros poseen por lo general interfaces de usuario y son gestionados como SaaS (\textit{Software as a Service}). Permiten escalabilidad y acceso a personas no tan técnicas a la configuración del servidor DNS. Los proyectos abiertos son más orientados a perfiles SysAdmin, donde un conocimiento detallado de la tecnología es necesario. En este caso puede hacerse complejo para las organizaciones mantener una arquitectura DNS sin incurrir en gastos de licencia o de personal calificado, dado que se hace necesario constantemente la intervención de profesionales para modificar la configuración.
+Tanto los servidores de código cerrado, como los de código abierto son mantenidos por instituciones. Los primeros poseen por lo general interfaces de usuario y son gestionados como SaaS (\textit{Software as a Service}). Permiten escalabilidad y acceso a personas sin conocimientos de administración de sistemas a la configuración del servidor DNS. Los proyectos abiertos son más orientados al perfil de administrador de sistemas, donde un conocimiento detallado de la tecnología es necesario.
+
+En este escenario puede hacerse complejo para las organizaciones mantener una arquitectura DNS sin incurrir en gastos de licencia o de personal calificado. Se hace necesario constantemente la intervención de profesionales para modificar la configuración. Una ventaja de poseer el servidor en infraestructura propia y privada es que es más seguro que tenerlo expuesto a internet.
 
 % https://doc.powerdns.com/authoritative/http-api/index.html
-En el caso de PowerDNS, existe una API HTTP para manejar las zonas del DNS autoritario. Además acepta diferentes tipos de backends, incluyendo los archivos de configuración de BIND para las zonas. Por tanto una implementación para BIND, tentativamente sería aplicable a PowerDNS y otros productos de código abierto. CoreDNS, en su lugar, es muy flexible y la mayor parte de su funcionalidad es derivada de plugins. Actualmente, las instalación por defecto cuenta con más de 30 plugins, pero existen muchos externos y la posibilidad de escribir nuevos para funcionalidades concretas.
+En el caso de PowerDNS\footnote{\url{https://github.com/PowerDNS/pdns}}, existe una API HTTP para manejar las zonas del DNS autoritario. Además acepta diferentes tipos de backends, incluyendo los archivos de configuración de BIND para las zonas. Por tanto una implementación para BIND, tentativamente sería aplicable a PowerDNS y otros productos de código abierto.
+
+CoreDNS\footnote{\url{https://github.com/coredns/coredns}}, en su lugar, es muy flexible y la mayor parte de su funcionalidad es derivada de plugins. Actualmente, las instalación por defecto cuenta con más de 30 plugins, pero existen muchos externos y la posibilidad de escribir nuevos para funcionalidades concretas.
+
+Knot\footnote{\url{https://gitlab.nic.cz/knot/knot-dns}} es un servidor DNS solo autoritario con un alto rendimiento, escrito en C. Soporta las características fundamentales del DNS actual, así como reconfiguración en tiempo de ejecución. El software esta orientado a sistemas operativos de tipo POSIX y su desarrollo va enfocado a las necesidades de la comunidad y usuarios donantes al proyecto.
+
+En el grupo de SaaS se encuentra Amazon Route 53\footnote{\url{https://aws.amazon.com/route53/}} con características esenciales para el internet actual. Dispone de cortafuegos para el \textit{resolver}, control de recuperación ante fallos, flujo de tráfico basado en geoproximidad, latencia, salud y otras consideraciones. Como es de esperar, soporta DNSSEC y hace uso de una interfaz gráfica en la web que permite realizar la gestión DNS sin manejar código o archivos de configuración.
+
+% TODO: Describe DNS Made Easy
+
+% TODO: Describe Google Cloud DNS
+
+% TODO: Describe DNSimple
 
 % \section{API REST}
 
@@ -123,17 +145,17 @@ En el caso de PowerDNS, existe una API HTTP para manejar las zonas del DNS autor
 
 \section{Golang}
 
-Go es un lenguaje compilado con tipado estático diseñado en Google, para el año 2007, por Robert Griesmen, Rob Pike y Ken Thompson. Fue desarrollado para afrontar los retos ingenieriles a los que se enfrentaban los ingenieros en Google. A día de hoy, desde su publicación en 2009, ha alcanzado una adopción masiva y empresas como Cloudflare, Dropbox, Meta, Microsoft, Netflix, PayPal, Twitter, Salesforce, Uber, etc. hacen uso de este lenguaje para servir millones de pedidos en escenarios de alta concurrencia con alta disponibilidad.                                                            
+Go es un lenguaje compilado con tipado estático diseñado en Google, para el año 2007, por Robert Griesmen, Rob Pike y Ken Thompson. Fue desarrollado para afrontar los retos ingenieriles a los que se enfrentaban los ingenieros en Google. A día de hoy, desde su publicación en 2009, ha alcanzado una adopción masiva y empresas como Cloudflare, Dropbox, Meta, Microsoft, Netflix, PayPal, Twitter, Salesforce, Uber, entre otras, hacen uso de este lenguaje para servir millones de pedidos en escenarios de alta concurrencia con alta disponibilidad.                                                            
 
 La biblioteca estándar por si sola ofrece las herramientas necesarias para desarrollar una aplicación web. \textit{Encoding} y \textit{decoding} de JSON, validación de datos, implementación de cliente y servidor HTTP, sistema de plantillas HTML seguro contra inyecciones de código, \textit{drivers} para las bases de datos mas usadas, son algunas de las funcionalidades que vienen con el lenguaje.
 
-Existen web frameworks de código abierto, enfocados en el rendimiento y el rápido prototipado, para ayudar en el desarrollo web. Gin, Buffalo, Echo, Flamingo son algunos de ellos. También de parte de la comunidad podemos encontrar ORMs (\textit{Object Relational Mapper}) como GORM, para la autenticación web Goth, con un número amplio de métodos [\cite{goth}], así como implementaciones de JWT (\textit{JSON Web Token}) en el lenguaje.
+Existen web frameworks de código abierto, enfocados en el rendimiento y el rápido prototipado, para ayudar en el desarrollo web. Gin\footnote{\url{https://github.com/gin-gonic/gin}}, Buffalo\footnote{\url{https://github.com/gobuffalo/buffalo}}, Echo\footnote{\url{https://github.com/labstack/echo}}, Flamingo\footnote{\url{https://github.com/i-love-flamingo/flamingo}} son algunos de ellos. También de parte de la comunidad podemos encontrar ORMs (\textit{Object Relational Mapper}) como GORM\footnote{\url{https://github.com/go-gorm/gorm}}, para la autenticación web Goth\footnote{\url{https://github.com/markbates/goth}}, con un número amplio de métodos [\cite{goth}], así como implementaciones de JWT (\textit{JSON Web Token}) en el lenguaje.
 
-El método de concurrencia que usa Go es uno de los aspectos fundamentales al considerar el lenguaje. Las llamadas gorutinas (\textit{goroutines} en inglés) son un mecanismo poderoso de concurrencia, más ligeras que los hilos, solo 2KB en tamaño. Un hilo puede tener cientos de gorutinas ejecutándose. La comunicación entre estas es a través de canales (\verb+chan+), vía de Go para recibir y enviar información entre las gorutinas.
+El método de concurrencia que usa Go es uno de los aspectos fundamentales al considerar el lenguaje. Las llamadas gorutinas (\textit{goroutines} en inglés) son un mecanismo poderoso de concurrencia, más ligeras que los hilos, con solo 2KB en tamaño. Un hilo puede tener cientos de gorutinas ejecutándose. La comunicación entre estas es a través de canales (\verb+chan+), vía de Go para recibir y enviar información entre las gorutinas.
 
 Con la versión 1.18 de Go se añadió genericidad [\cite{go-generics}] al lenguaje, poderosa característica que permite ampliar la reusabilidad del código y la eficiencia durante el desarrollo. El manejo de memoria en Go, es realizado de forma automática por el recolector de basura. El impacto de este sobre el rendimiento es menor y añade más seguridad y portabilidad al software que el manejo manual de la memoria.
 
-El lenguaje hace uso de paquetes para separar el código lo que aumenta la portabilidad y hace uso de un desarrollo enfocado a bibliotecas. De esta forma diferentes proyectos pueden ser desarrollados sobre otros. La compilación en Go se realiza a un solo binario y es más rápida que en otros lenguajes compilados. Las dependencias se encuentran de forma explicita en el código lo que permite realizar la compilación y unión de estas de forma más rápida. En un escenario donde \verb+A.go+ depende de \verb+B.go+ y este de \verb+C.go+, pero \verb+A.go+ no de \verb+C.go+, el compilador primero compila \verb+C.go+, luego \verb+B.go+, y finalmente \verb+A.go+, adicionalmente para compilar \verb+A.go+ se usa \verb+B.go+, no \verb+C.go+ [\cite{go-deps}]. Esta aproximación disminuye considerablemente el tiempo de compilación en proyectos con muchas dependencias.
+El lenguaje hace uso de paquetes para separar el código lo que ayuda a la separación de conceptos y hace uso de un desarrollo enfocado a bibliotecas. De esta forma diferentes proyectos pueden ser desarrollados sobre otros. La compilación en Go se realiza a un solo binario y es más rápida que en otros lenguajes compilados. Las dependencias se encuentran de forma explícita en el código lo que permite realizar la compilación y unión de estas de forma más rápida. En un escenario donde \verb+A.go+ depende de \verb+B.go+ y este de \verb+C.go+, pero \verb+A.go+ no de \verb+C.go+, el compilador primero compila \verb+C.go+, luego \verb+B.go+, y finalmente \verb+A.go+, adicionalmente para compilar \verb+A.go+ se usa \verb+B.go+, no \verb+C.go+ [\cite{go-deps}]. Esta aproximación disminuye considerablemente el tiempo de compilación en proyectos con muchas dependencias.
 
 Para facilitar el desarrollo podemos encontrar de forma predeterminada en el lenguaje varias utilidades: manejo de dependencias, generación de documentación con ejemplos, formateo del código, automatización de tests y \textit{profiling}, son las principales. También es posible analizar los binarios puestos en producción a través de un servidor HTTP [\cite{go-pros-cons}].
 
@@ -141,11 +163,11 @@ Para facilitar el desarrollo podemos encontrar de forma predeterminada en el len
 
 Como fue mencionado, existen diferente bibliotecas y frameworks para el desarrollo de servicios HTTP. Este entorno es bastante maduro pues el principal uso del lenguaje es escribir aplicaciones de \textit{back-end}.
 
-Buffalo es un ecosistema para el desarrollo web, actualmente en su version 1.0.1 cuenta con herramientas para generar el la estructura inicial de un proyecto, un ORM con generación automática de modelos, migraciones y configuración para la base de datos. Viene listo para trabajar con tecnología front-end pero también tiene como opción generar un proyecto con el objetivo de servir una API. Podemos encontrar por defecto \textit{hot code reloading} y soporte para realizar \textit{testing}.
+Buffalo es un ecosistema para el desarrollo web, actualmente en su version 1.0.1 cuenta con herramientas para generar el la estructura inicial de un proyecto, un ORM con generación automática de modelos, migraciones y configuración para la base de datos. Viene listo para trabajar con tecnología front-end pero también tiene como opción generar un proyecto con el objetivo de servir una API REST HTTP. Podemos encontrar por defecto \textit{hot code reloading} y soporte para realizar \textit{testing}.
               
-Echo se autoproclama de alto rendimiento, extensible y minimalista. Este framework dispone de forma predeterminada de un amplio número de \textit{middlewares} que cubren muchos escenarios comunes en el desarrolla de una API o servidor HTML, además de, TLS de forma automática, control de direcciones IP de clientes e integración con cualquier sistema de plantillas. La documentación contiene un \textit{cookbook} con guías paso a paso para diferentes soluciones que se pueden implementar  con el framework, siendo así un buen punto de consulta.
+Echo se autoproclama de alto rendimiento, extensible y minimalista. Este framework dispone de forma predeterminada de un amplio número de \textit{middlewares} que cubren muchos escenarios comunes en el desarrolla de una API o servidor HTML, además de, TLS (\textit{Transport Layer Security}) de forma automática, control de direcciones IP de clientes e integración con cualquier sistema de plantillas. La documentación contiene un índice de referencias con guías paso a paso para diferentes soluciones que se pueden implementar sobre framework, siendo así un buen punto de consulta.
 
-Flamingo es un framework bastante joven, cuenta con poco más de 300 estrellas en GitHub. Está más bien enfocado al desarrollo de aplicaciones \textit{full-stack} que a la implementacion de APIs. Dispone de un poderoso motor de plantillas, diseño orientado a microservicios y escalabilidad en el rendimiento. Además, posee un arsenal de características para la implementación de \textit{e-commerces}, adaptables a las necesidades de negocio.
+Flamingo es un framework bastante joven, cuenta con poco más de 300 estrellas en GitHub. Está más bien enfocado al desarrollo de aplicaciones \textit{full-stack} que a la implementacion de APIs. Dispone de un poderoso motor de plantillas, diseño orientado a microservicios y escalabilidad en el rendimiento. Además, posee un arsenal de características para la implementación de plataformas de comercio en línea, adaptables a las necesidades de negocio.
 
 Finalmente Gin, con más de 63800 estrellas en GitHub es uno de los frameworks más usados. Semejante a los anteriores, ofrece alto rendimiento, soporte para \textit{middlewares} y extensión de estas, y manejo de errores. Gin captura errores  de pánico y se recupera de estos, de esta forma el servidor siempre esta disponible. El soporte para validación de JSON viene integrado, así como la renderización de plantillas.
 
@@ -153,7 +175,7 @@ Puede concluirse que Go tiene un ambiente con bastas opciones para el desarrollo
 
 \section{Vue.js}
 
-Vue.js es un framework progresivo de código abierto para crear interfaces de usuario en la web con Javascript. Es creado por Evan You después de trabajar para Google en varios proyectos con AngularJS. Vue tiene características similares a Angular, pero con una sintaxis más concisa y sencilla de usar. De igual forma ha adoptado ideas de otros frameworks y bibliotecas como React.
+Vue.js\footnote{\url{https://github.com/vuejs/core}} es un framework progresivo de código abierto para crear interfaces de usuario en la web con Javascript. Es creado por Evan You después de trabajar para Google en varios proyectos con AngularJS. Vue tiene características similares a Angular, pero con una sintaxis más concisa y sencilla de usar. De igual forma ha adoptado ideas de otros frameworks y bibliotecas como React.
 
 Ofrece un modelo de programación declarativo y basado en componentes que ayuda a desarrollar interfaces de usuario, tanto simples como complejas, de manera flexible. La comunidad ha desarrollado muchas bibliotecas opcionales que son activamente mantenidas, como son: Vue Router (enrutador para crear aplicaciones \textit{single-page}, SPA, por sus siglas en inglés), Pinia (biblioteca para manejo de estado), Vue Server Renderer (biblioteca para renderizado del lado del servidor), entre otras.
 
@@ -234,15 +256,24 @@ Las peticiones al servidor son realizadas de acuerdo a la componente que es carg
 
 Docker brinda la capacidad de empaquetar y ejecutar una aplicación en un entorno aislado llamado contenedor. Los contenedores son livianos y contienen todo lo necesario para ejecutar la aplicación, por lo que no usan las dependencias instaladas en el \textit{host}. Un contenedor es creado a partir de una imagen, y estas se pueden compartir fácilmente asegurando que todas las personas que la reciben obtengan una versión que funciona de la misma manera. Adicionalmente permite manejar la infraestructura de la misma forma que se manejan las aplicaciones, lo que disminuye el tiempo entre escribir el código y llevarlo a producción.
 
-La adopción de Docker es notable, existen alternativas como Podman, LXD, Containerd, Buildah, etc., pero la mayoría de los equipos y empresas escogen a Docker para la contenedorización de las aplicaciones. Este es de código abierto y gratis para proyectos de individuos, educación, pequeñas empresas y comunidades de código abierto.
+Docker hace especial uso de las características de Linux para el aislamiento de los contenedores, específicamente \verb|namespaces| para el aislamiento de los recursos del host y \verb|cgroups| para el control y limitación de esos recursos. A diferencia de una máquina virtual (MV) que realiza la virtualización sobre el hardware, un contenedor es un proceso corriendo en el sistema operativo, y como resultado se realiza la virtualización sobre este.
 
-El entorno en que se encuentra Docker es muy rico, dispone de DockerHub, un sitio para almacenar imágenes, tanto públicas como privadas, lo que ofrece rápido acceso desde cualquier computadora a una imagen que haya sido subida. Estos repositorios son usados por las principales empresas distribuidoras de software, por lo que se pueden obtener productos de software con todas sus dependencias con solo una descarga. Válido mencionar que las principales tecnologías involucradas en este proyecto tienen sus imágenes en DockerHub: Golang, Vue?, y los principales proveedores de DNS como BIND 9, PowerDNS y CoreDNS.
+\begin{figure}[!ht]
+    \centering
+    \includegraphics[width=\linewidth]{draws/cont-vs-vm.png}
+    \caption{Comparación del funcionamiento de los contenedores y las MV. [\cite{docker-containers}]}
+\end{figure}
 
-Las imágenes de Docker tienen una arquitectura por capas, una se construye sobre las otra. Así, si dos imágenes tienen una capa en común, dicha capa no se almacena de forma duplicada en disco y comparten ambas la misma. Los contenedores pueden persistir información en volúmenes, los cuales son sumamente portables, incluso entre sistemas operativos. La comunicación entre los servicios (contenedores) de Docker esta aislada al sistema, y se debe especificar los puertos que se necesiten exponer para dar acceso al exterior. Estos también pueden ser orquestados con Docker Swarm o Kubernetes, lo que permite escalabilidad en producción acorde a las necesidades de los servicios.
+
+La adopción de Docker es notable, existen alternativas como Podman, LXD, y Buildah, pero un número considerable de equipos y empresas escogen a Docker para la contenedorización de las aplicaciones [\cite{docker-usage}]. Este es de código abierto y gratis para proyectos de individuos, educación, pequeñas empresas y comunidades de código abierto.
+
+El entorno en que se encuentra Docker es muy rico, dispone de DockerHub\footnote{\url{https://hub.docker.com}}, un sitio para almacenar imágenes, tanto públicas como privadas, lo que ofrece rápido acceso desde cualquier computadora a una imagen que haya sido subida. Estos repositorios son usados por las principales empresas distribuidoras de software, por lo que se pueden obtener productos de software con todas sus dependencias con solo una descarga. Válido mencionar que las principales tecnologías involucradas en este proyecto poseen imágenes en DockerHub: Golang, Node.js\footnote{\url{https://nodejs.org/en/}} para desplegar Vue.js, y los principales proveedores de DNS como BIND 9\footnote{\url{https://hub.docker.com/r/internetsystemsconsortium/bind9}}, PowerDNS\footnote{\url{https://hub.docker.com/u/powerdns}} y CoreDNS\footnote{\url{https://hub.docker.com/r/coredns/coredns/}}.
+
+Las imágenes de Docker tienen una arquitectura por capas, una se construye sobre las otra. Así, si dos imágenes tienen una capa en común, dicha capa no se almacena de forma duplicada en disco y comparten ambas la misma. Los contenedores pueden persistir información en volúmenes, los cuales son sumamente portables, incluso entre sistemas operativos. La comunicación entre los servicios (contenedores) de Docker esta aislada al sistema, y se debe especificar los puertos que se necesiten exponer para dar acceso al exterior. Estos también pueden ser orquestados con Docker Swarm\footnote{\url{https://docs.docker.com/engine/swarm/}} o Kubernetes\footnote{\url{https://kubernetes.io/es/}}, lo que permite escalabilidad en producción acorde a las necesidades de cada servicio.
 
 \subsection{Compose}
 
-Docker-Compose es una herramienta para la definición y ejecución de aplicaciones con múltiples contenedores. Usa un archivo YAML como configuración, en el que se declaran los servicios, redes, volúmenes etc., que va a usar la aplicación. Es capaz de iniciar, detener y reiniciar contenedores, consultar el estado y los \textit{logs} de los servicios en ejecución, así como la ejecución de comandos directamente sobre los servicios.      
+Compose es una herramienta para la definición y ejecución de aplicaciones con múltiples contenedores [\cite{docker-compose}]. Usa un archivo YAML como configuración, en el que se declaran los servicios, redes, volúmenes y otros objetos de Docker de los que va a hacer uso la aplicación. Es capaz de iniciar, detener y reiniciar contenedores, consultar el estado y los \textit{logs} de los servicios en ejecución, así como ejecutar comandos directamente sobre los servicios.      
 
-Resulta de suma utilidad a la hora de desplegar múltiples servicios que estén relacionados en un proyecto, pues estos sn ubicados en una misma red privada, aislados de otros contenedores y el host. Además, en esta red los servicios son localizables por su \textit{hostname} sin necesidad de conocer sus direcciones IP con anterioridad.
+Resulta de suma utilidad a la hora de desplegar múltiples servicios que estén relacionados en un proyecto, pues estos se alojan en una misma red privada, aislados de otros contenedores y el \textit{host}. Además, en esta red los servicios son localizables por su \textit{hostname} sin necesidad de conocer sus direcciones IP con anterioridad.
 
