@@ -1,5 +1,9 @@
 \chapter{Propuesta}\label{chapter:proposal}
 
+A partir del estudio hecho en el capítulo anterior podemos asumir que sería beneficioso para las soluciones actuales de código abierto disponer de una API HTTP que permita la configuración de estos de forma programática. Facilitaría la integración con diferentes tipos de interfaces de usuario, ya sea web, de escritorio o una plataforma de terceros. Esta es una característica decisiva para la adopción de más usuarios, por ello los diferentes SaaS apuestan por ella y la ofrecen dentro de sus planes de pago.
+
+De forma subyacente los diferentes servidores DNS están sujetos a la implementación de DNS propuesta en los RFC. Por tanto cada uno de los servidores de nombres debe tener el mismo punto de vista respecto al sistema. Poseer de un sistema de almacenamiento para persistir los diferentes conjuntos de RR en cada zona e implementar las características de DNS actual, tanto las requeridas como las opcionales. Estos puntos en común que deben compartir las diferentes implementaciones de servidores DNS sientan las bases para asumir los aspectos en los que sustentar la propuesta teórica de una API HTTP sobre ellos.
+
 Como propuesta de solución a la implementación de una API para los diferentes softwares de servidores DNS autoritarios de código abierto, se propone un arquitectura en la que API tiene acceso al sistema de almacenamiento de la configuración DNS para su manejo. Además existe un medio de comunicación entendible por la API y el servidor DNS para desarrollar cualquier intercambio de información necesario.
 
 \begin{figure}[!ht]
@@ -28,9 +32,11 @@ Asumiendo que existe un servidor DNS autoritario $A$, con un sistema de persiste
     \caption{Diagrama de flujo para la función \textbf{load}.}
 \end{figure}
 
+Este procedimiento tiene como objetivo exponer cada una de las zonas con su conjunto de registros a la API. El mecanismo de lectura debe funcionar de acuerdo a como esta estructurada la información en el servidor DNS, archivos de texto plano, binarios o una base de datos externa. La estructura de datos resultante es manejada por la API y debe reflejar en todo momento el estado actual del servidor DNS.
+
 \section{Escritura de la Configuración DNS}
 
-Para definir \verb+save+, es necesario considerar que existe un bloqueo $L$ que limita el acceso de escritura (POST, PATCH, DELETE) a la API y $C_A$ un mecanismo de comunicación entre el servicio de la API y $A$. Sean $h(C_A)$ una función que indica a $A$ que su configuración en $S_A$ ha sido modificada, $f(M_A, u)$ la función que almacena de forma estructurada en el almacenamiento de la API las modificaciones $u$ enviados a esta y $g(S_A, u)$ la función que persiste el conjunto de modificaciones $u$ de forma estructurada en el sistema de almacenamiento de $A$. Entonces, se define \verb+save+ de la siguiente manera.
+Para definir \verb+save+, es necesario considerar que existe un mecanismo de comunicación $C_A$ entre el servicio de la API y $A$. Sean $h(C_A)$ una función que indica a $A$ que su configuración en $S_A$ ha sido modificada, $f(M_A, u)$ la función que almacena de forma estructurada en el almacenamiento de la API las modificaciones $u$ enviados a esta y $g(S_A, u)$ la función que persiste el conjunto de modificaciones $u$ de forma estructurada en el sistema de almacenamiento de $A$. Entonces, se define \verb+save+ de la siguiente manera.
 
 \begin{algorithmic}
 \Procedure{save}{$A$, $u$}
@@ -47,5 +53,8 @@ Para definir \verb+save+, es necesario considerar que existe un bloqueo $L$ que 
     \caption{Diagrama de flujo para la función \textbf{save}.}
 \end{figure}
 
-Cuando se evalúa $f$ son realizadas las validaciones para garantizar que los cambios introducidos por $u$ son compatibles con el estado actual de $A$. En caso positivo, la actualización introducida por $u$ es persistida. Posteriormente, se notifica al servidor DNS que puede recargar su configuración. Si los estados posteriores (invocación a $g$ y $h$) a la validación de $u$ ocurren sin errores, se actualiza la información en $M_A$ para sincronizarla con los cambios realizados al servidor autoritario $A$.
+Cuando se evalúa $f$ son realizadas las validaciones para garantizar que los cambios introducidos por $u$ son compatibles con el estado actual del servidor de nombres $A$. En caso positivo, la actualización introducida por $u$ es persistida. Posteriormente, se notifica al servidor DNS que puede recargar su configuración. Si los estados posteriores (invocación a $g$ y $h$) a la validación de $u$ ocurren sin errores, se actualiza la información en $M_A$ para sincronizarla con los cambios realizados al servidor autoritario $A$.
 
+En caso de errores ambos sistemas deben quedar en el estado anterior a la ejecución de los cambios y la API debe retornar una respuesta indicando el error al completar el pedido. Para ello debe ser implementado un mecanismo que ejecute un \textit{rollback} de forma apropiada.
+
+La interfaz de comunicación es explícitamente necesaria para notificar al servidor DNS de cambios. Por lo que cualquier tipo de protocolo factible para este fin es aceptable. En caso que el servidor de nombres sea capaz de detectar cambios en su configuración de forma autónoma en tiempo de ejecución, la invocación a $h$ puede ser omitida en la implementación.

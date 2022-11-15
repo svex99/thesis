@@ -12,9 +12,9 @@ named.conf.default-zones  named.conf.local  named.conf.options
 rndc.key  zones.rfc1918
 \end{lstlisting}
 
-El fichero principal de configuración para BIND es \verb+named.conf+, desde él se importan con la directiva \verb+include+ los demás ficheros de configuración (\verb+named.conf.*+) que se encuentran en el directorio. Así la configuración puede ser dividida en diferentes archivos, facilitando su mantenibilidad y legibilidad.
+El fichero principal de configuración para BIND es \verb+named.conf+, desde él se importan con la directiva \verb+include+ los demás ficheros de configuración (\verb|named.conf.options|, \verb|named.conf.local| y \verb|named.conf.default-zones|) que se encuentran en el directorio. Así la configuración puede ser dividida en diferentes archivos, facilitando su mantenibilidad y legibilidad.
 
-El archivo \verb+named.conf.local+ tiene las opciones globales que son usadas al iniciar el servicio. Estas son ubicadas entre llaves en el cuerpo de la declaración \verb+options+. La gramática esta disponible online en el manual de administrador para BIND\footnote{\url{https://bind9.readthedocs.io/en/v9_18_8/reference.html\#namedconf-statement-options}}. En este se manejan los aspectos fundamentales de DNS, \textit{caching}, logging a través de \verb+dnstap+, así como la configuración relacionada a DNSSEC. En este espacio también son definidas las listas de control de acceso (ACL, por sus siglas en inglés), que permiten restringir el acceso al servidor basado en la dirección IP del host que hace la petición. BIND dispone de gran granularidad al poder definir un ACL para cada uno de diferentes tipos de consultas que acepta el servidor.
+El archivo \verb+named.conf.options+ tiene las opciones globales que son usadas al iniciar el servicio. Estas son ubicadas entre llaves en el cuerpo de la declaración \verb+options+. La gramática esta disponible online en el manual de administrador para BIND\footnote{\url{https://bind9.readthedocs.io/en/v9_18_8/reference.html\#namedconf-statement-options}}. En este se manejan los aspectos fundamentales de DNS, \textit{caching}, logging a través de \verb+dnstap+, así como la configuración relacionada a DNSSEC. En este espacio también son definidas las listas de control de acceso (ACL, por sus siglas en inglés), que permiten restringir el acceso al servidor basado en la dirección IP del host que hace la petición. BIND dispone de gran granularidad al poder definir un ACL para cada uno de diferentes tipos de consultas que acepta el servidor.
 
 El fichero \verb+named.conf.local+ contiene la configuración local para el servidor DNS y es donde se declaran las zonas que este va a manejar. En este también se puede hacer uso de la directiva \verb+include+, para importar otros ficheros que declaran zonas usualmente, como es el caso de \verb+zones.rfc1918+.
 
@@ -62,9 +62,99 @@ Con el fin de implementar la función \verb+load+ sobre el sistema de almacenami
 
 El proceso de \textit{parsing} permite estructurar la información en texto plano tanto al leerla como escribirla a disco. La gramática para los archivos de configuración está completamente definida en la documentación de BIND y está sujeta a los cambios que introduzca ISC en el software. En el caso de los archivos de registros no es tan sencillo, se rigen por DNS y recordar que este es un sistema en constante cambio, son añadidos nuevos tipos de registros y por tanto es una gramática que puede cambiar en el tiempo. Definirla sobre los tipos más comunes y dejar como alternativa su extensibilidad es la opción más factible en este proyecto.
 
-- Mencionar la biblioteca de Go Participle y por que se uso esta para el proceso de parsing y que tipo de parser genera.
+Para la implementación de los \textit{parsers} fue empleada la biblioteca de Go, Participle\footnote{\url{https://github.com/alecthomas/participle}}. Esta hace uso de la genericidad en el lenguaje para la definición de los parsers y genera un parser de descenso recursivo con \textit{backtracking} a partir de la gramática de entrada. La gramática es definida de forma declarativa en las etiquetas (\verb|parser|) de las estructuras que la conforman y lo tokens son almacenados en el campo al que referencian.
 
-- Mostrar código de ejemplo sobre la implementación de los dos parsers que fue necesario usar. El de los ficheros de zona y el de la configuración para los servidores primarios.
+El parser resultante para los archivos de zona, de forma simplificada, es el siguiente:
+
+\begin{lstlisting}[frame=single, language=Go, escapechar=!, caption=Implementación en Go del \textit{parser} para los archivos de zona.]
+import (
+    "github.com/alecthomas/participle/v2"
+	"github.com/alecthomas/participle/v2/lexer"
+)
+
+var (
+    ZoneLexer = lexer.MustSimple([]lexer.SimpleRule{
+        {Name: "Directive", Pattern: `\$(ORIGIN|TTL)`},
+        {Name: "Keyword", Pattern: `@|IN`},
+        {Name: "RType", Pattern: `SOA|NS|A|MX|TXT|CNAME`},
+        {Name: "Origin", Pattern: `[a-zA-Z][\w\-]*\.[a-zA-Z]+`},
+        {Name: "Name", Pattern: `[a-zA-Z][\w\-]*`},
+        {Name: "Ttl", Pattern: `\d+[hdw]`},
+        {Name: "Ipv4", Pattern: `\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}`},
+        {Name: "Uint", Pattern: `\d+`},
+        {Name: "String", Pattern: `"[^"\n]*"`},
+        {Name: "Punct", Pattern: `[\.\(\)]`},
+        {Name: "Comment", Pattern: `;[^\n]*\n+`},
+        {Name: "Whitespace", Pattern: `[ \t\r]+`},
+        {Name: "NewLine", Pattern: `[\n]+`},
+    })
+    ZoneParser = participle.MustBuild[DomainConf](!\label{line:parser}!
+        participle.Lexer(ZoneLexer),
+        participle.Union[Record](NSRecord{}, ARecord{}, MXRecord{}, TXTRecord{}, CNAMERecord{}),!\label{line:union-gen}!
+        participle.Elide("Whitespace", "Comment"),
+        participle.Unquote("String"),
+        participle.UseLookahead(2),
+    )
+)
+
+type DomainConf struct {
+	Origin    string     `parser:"'$ORIGIN' @Origin '.' NewLine" json:"origin"`
+	Ttl       string     `parser:"'$TTL' @Ttl NewLine" json:"ttl"`
+	SOARecord *SOARecord `parser:"@@ NewLine" json:"soaRecord"`
+	Records   []Record   `parser:"@@*" json:"records"`
+}
+
+type Record interface {
+    // Omitted for brevity
+}
+
+type SOARecord struct {
+	NameServer string `parser:"'@' 'IN' 'SOA' @Name" json:"nameServer"`
+	Admin      string `parser:"@Name" json:"admin"`
+	Serial     uint   `parser:"'(' @Uint" json:"serial"`
+	Refresh    uint   `parser:"@Uint" json:"refresh"`
+	Retry      uint   `parser:"@Uint" json:"retry"`
+	Expire     uint   `parser:"@Uint" json:"expire"`
+	Minimum    uint   `parser:"@Uint ')'" json:"minimum"`
+}
+
+type NSRecord struct {!\label{line:ns}!
+	Type       string `parser:"'@' 'IN' @'NS'" json:"type"`
+	NameServer string `parser:"@Name NewLine" json:"nameServer"`
+}
+
+type ARecord struct {
+	Name string `parser:"@Name" json:"name"`
+	Type string `parser:"'IN' @'A'" json:"type"`
+	Ip   string `parser:"@Ipv4 NewLine" json:"ip"`
+}
+
+type MXRecord struct {
+	Type        string `parser:"'@' 'IN' @'MX'" json:"type"`
+	Priority    uint   `parser:"@Uint" json:"priority"`
+	EmailServer string `parser:"@Name NewLine" json:"emailServer"`
+}
+
+type TXTRecord struct {
+	Type  string `parser:"'@' 'IN' @'TXT'" json:"type"`
+	Value string `parser:"@String NewLine" json:"value"`
+}
+
+type CNAMERecord struct {
+	SrcName string `parser:"@Name 'IN'" json:"srcName"`
+	Type    string `parser:"@'CNAME'" json:"type"`
+	DstName string `parser:"@Name NewLine" json:"dstName"`
+}
+\end{lstlisting}
+
+Como los diferentes tipos de registros (excluyendo a \verb|SOA|, por conveniencia siempre el primero) pueden encontrarse indistintamente en un archivo de zona, el orden de estos no es relevante, solo la información contenida acorde al tipo. En la línea~\ref{line:union-gen} se captura este comportamiento haciendo uso de la genericidad que ofrece el lenguaje, por esta vía es posible declarar una producción en la gramática de la forma \verb+Record -> NSRecord | ARecord | MXRecord | TXTRecord | CNAMERecord+. El nodo raíz del AST (\textit{Abstract Syntax Tree}) es la estructura usada como tipo genérico en la construcción del \textit{parser} (línea~\ref{line:parser}), y en este caso particular es la base para la información del archivo de zona. Aquí es declarado que todo archivos de zona contiene \verb+$TTL+, \verb|$ORIGIN|, \verb|SOA| y un \textit{slice} de \verb|Record|.
+
+Tomando como ejemplo la estructura \verb+NSRecord+ (línea~\ref{line:ns}), esta va a consumir una cadena con una forma similar a \verb|@ IN NS <Name>|. Cuando lo haga va a almacenar en \verb|Type| el valor de tipo \verb|string| \verb|"NS"|. Luego declara que en el campo \verb+NameServer+ se va almacenar un token que coincida con el tipo \verb+Name+ del \textit{lexer} y consumir un salto de línea.
+
+
+Una ventaja notable de poder representar la gramática en las etiquetas de las estructuras es que es consistente con la sintaxis usada para la serialización por defecto de estructuras en Go. Así se puede mantener en la misma estructura que almacena los tokens resultado del proceso de \textit{parsing} la declaración de los campos correspondientes cuando se serialicen y deserialicen las estructuras al ser transmitidas por la red.
+
+- Mostrar el parser de la configuración (\verb|named.conf.local|)?
 
 \subsection{Almacenamiento en Memoria vs Disco}
 
@@ -74,21 +164,119 @@ Además, se pude obtener menores valores de latencia, dado que el acceso a valor
 
 \section{Escritura de la Configuración DNS}
 
-La información resultante del proceso de \textit{parsing} puede ser modificada y escrita a disco sin inconvenientes. Así pueden ser modificado los archivos de configuración del servidor DNS de forma directa sin afectar su funcionamiento. Este proceso puede resumirse en tomar la estructura de datos resultante del \textit{parsing}, llevarla a una cadena de texto, similar a la que tuvo como origen y escribir dicha cadena al fichero de configuración.
+La información resultante del proceso de \textit{parsing} puede ser modificada y escrita a disco sin inconvenientes. Así pueden ser modificado los archivos de configuración del servidor DNS de forma directa sin afectar su funcionamiento. Este proceso puede resumirse en tomar el AST resultante, llevarlo a una cadena de texto, similar a la que tuvo como origen y escribir dicha cadena al fichero de configuración.
 
-Como indica la función \verb+save+, es necesario mantener actualizada la copia de la configuración en memoria, esto evita tener que \textit{parsear} el archivo de configuración en modificaciones posteriores. Así se realiza el \textit{parsing} una sola vez al iniciar el sistema, posteriormente solo las escrituras de la estructura de datos al archivo de configuración correspondiente.
+Como indica la función \verb+save+, es necesario mantener actualizada la copia de la configuración en memoria, esto evita tener que \textit{parsear} el archivo de configuración en modificaciones posteriores. Así se realiza el \textit{parsing} una sola vez al iniciar el sistema, posteriormente solo las escrituras del AST al archivo correspondiente.
 
-- Importancia de incrementar el serial en el SOA.
+Las zonas en los servidores DNS primarios son consideradas zonas de inicio de autoridad. Estas son la fuente de información para el servidor maestro y sus esclavos. Son representadas por un registro de tipo \verb|SOA| (\textit{Start Of Authority}) que contiene información administrativa y de importancia para los servidores secundarios. Los diferentes campos que contiene indican cada que tiempo los servidores secundarios deben consultar al primario por actualizaciones, cada que tiempo consultar por cambios en el número de serie y después de que intervalo detenerse los esclavos en caso de fallo en el maestro. Un aumento en el número de serie indica a los servidores secundarios que ha ocurrido una actualización en la zona y por tanto se debe iniciar una transferencia.
+
+\begin{lstlisting}[frame=single, numbers=none, caption=Ejemplo de zona con \textit{SOA}.]
+$ORIGIN example.com.
+$TTL 86400
+@   IN  SOA     ns.example.com. admin@example.com (
+        2022110300  ;Serial
+        7200        ;Refresh
+        3600        ;Retry
+        1209600     ;Expire
+        3600        ;Negative response caching TTL
+)
+\end{lstlisting}
+
+Por tanto es de vital importancia para el funcionamiento del servicio DNS que el número de serie sea incrementado en cada modificación a la zona, a pesar de que se pueda enviar una consulta de tipo \verb|NOTIFY| a los esclavos para alertar de una transferencia de zona. El número de serie es un entero positivo que indica la versión de la copia original de la zona, por lo general se puede usar como valor la fecha de cambio más dos dígitos para el caso en el que ocurran múltiples modificaciones el mismo día.
+
+De esta forma, en la implementación, es realizada la actualización de la versión de la zona cada vez que se persisten cambios en la configuración DNS.
+
+\begin{lstlisting}[frame=single, language=Go]
+// Generates a new serial for the SOA record.
+// Generated serials follows the format YYYYMMDDNN where NN is a two digits identifier.
+func (dc *DomainConf) UpdateSerial() {
+    now := time.Now().UTC()
+    newSerial := uint(now.Year()*1_000_000 + int(now.Month())*10_000 + now.Day()*100)
+    if dc.SOARecord.Serial >= newSerial {
+        dc.SOARecord.Serial = dc.SOARecord.Serial + 1
+    } else {
+        dc.SOARecord.Serial = newSerial
+    }
+}
+\end{lstlisting}
+
+Un cambio en la zona puede ser añadir, modificar o eliminar un registro. Estos cambios son originados por una invocación a los puntos finales de la API y por tanto cabe la posibilidad de que se realicen de forma concurrente en memoria. Siendo así se hace necesario limitar el acceso concurrente de escritura para evitar la corrupción de los datos haciendo uso de una instancia de \verb|sync.Mutex|. Cuando una modificación arriba a la API, la dependencia que maneja la configuración de BIND se encarga de tomar acceso sobre este bloqueo, realizar la escritura en disco y memoria y luego liberarlo.
+
+La función principal del bloqueo es mantener la consistencia entre la información que se encuentra en memoria y en disco, asegurando que cada escritura en memoria tenga su sucesiva escritura en disco. El AST puede implementar su propio mecanismo para manejar el acceso concurrente en memoria, de igual forma se puede hacer a la hora de implementar la escritura en los archivos de configuración del disco. Pero estos dos por separado no garantizan la sincronización memoria-disco ante el acceso concurrente a la API. Además, es importante poder recuperarse de un error de escritura en disco, sin corromper la información en memoria.
 
 \subsection{Comunicación con el servidor DNS}
 
-Cuando BIND sufre cambios en los ficheros de configuración estos no son detectados y reflejados en tiempo de ejecución. Debe reiniciarse el servicio o notificarlo de que ha ocurrido una actualización. La alternativa mas eficiente es la segunda y \verb+rndc+ es la herramienta recomendada para este proceso.
+Cuando BIND sufre cambios en los ficheros de configuración estos no son detectados y reflejados en tiempo de ejecución. Debe reiniciarse el servicio o notificarlo de que ha ocurrido una actualización. La alternativa mádos eficiente es la segunda y \verb+rndc+ es la herramienta recomendada para este proceso.
 
 \verb+rndc+ se comunica con el servidor de nombres a través de una conexión TCP, enviando comandos con una firma digital. La versión actual utiliza como algoritmos de autenticación HMAC-MD5 (por compatibilidad), HMAC-SHA1, HMAC-SHA224, HMAC-SHA256 (por defecto), HMAC-SHA384, y HMAC-SHA512. Estos utilizan una clave secreta compartida en cada lado de la conexión, lo cual provee de autenticación de tipo TSIG para la petición del comando y la respuesta del servidor. \verb+rndc+ utiliza una archivo de configuración para determinar cómo conectarse al servidor y el algoritmo y llave a emplear en la autenticación.
 
-- Hablar sobre los comandos de rndc posibles a usar: reconfig, reload y reload <zone>.
+Para indicar cambios en los archivos de BIND con \verb|rndc| están disponibles los comandos \verb|reconfig| y \verb|reload|. El primero es empleado para notificar de una actualización en la configuración (\verb|named.conf| o sus dependencias) de BIND, por tanto si una nueva zona es añadida BIND lo detectará. A pesar de cargar las nuevas zonas, \verb|reconfig| no percibirá cambios en las zonas. Para detectar cambios en la zona es necesario usar \verb|reload| o de forma más específica \verb|reload <zone-name>|, especificando la zona se agiliza el proceso en servidores que tengan un alto volumen de zonas y por lo general es la mejor opción, evitando verificar zonas innecesariamente.
 
-- Como se realiza la invocacion de estos a traves de la api de docker en el contenedor del servidor DNS.
+\begin{table}[!ht]
+    \centering
+    \begin{tabular}{|l|l|}
+    \hline
+        \textbf{Evento} & \textbf{Comando} \\ \hline
+        Nueva zona & \verb|reconfig| \\ \hline
+        Modificar zona & \verb|reload <zone-name>| \\ \hline
+        Elimiar zona & \verb|reconfig| \\ \hline
+    \end{tabular}
+    \caption{Comando \textbf{rdnc} apropiado para cada evento.}
+\end{table}
+
+En las opciones de conexión de \verb|rndc| puede ser especificada la dirección IP del servidor de BIND al que conectarse. Siendo así, es posible instalar \verb|rdnc| en el ambiente de la API y especificar la dirección del contenedor que ejecuta a BIND. Pero dado que la instalación de BIND viene con \verb|rndc| por defecto, es más factible invocar este de forma programática a través de Docker. Para ello se implementó un método que ejecutase un comando en el contenedor remoto, tomando como referencia la implementación del comando \verb|docker exec|\footnote{\url{https://github.com/docker/cli/blob/1163b4609978e0e6f2b2629b59c4a62d348e1466/cli/command/container/exec.go\#L99}} y en base a él los métodos \verb|Reconfig| y \verb|ReloadZone|.
+
+\begin{lstlisting}[frame=single, language=Go, caption=Métodos para actualizar a BIND con los cambios en sus archivos.]
+func (bs *BindService) exec(command []string) error {
+    if _, err := bs.DockerCli.ContainerInspect(bs.ctx, bs.ContainerId); err != nil {
+        return err
+    }
+
+    execCreateConfig := &types.ExecConfig{
+        User:         "bind",
+        Privileged:   false,
+        Tty:          false,
+        AttachStdin:  false,
+        AttachStderr: false,
+        AttachStdout: false,
+        Detach:       true,
+        DetachKeys:   "",
+        Env:          []string{},
+        WorkingDir:   "/",
+        Cmd:          command,
+    }
+
+    response, err := bs.DockerCli.ContainerExecCreate(bs.ctx, bs.ContainerId, *execCreateConfig)
+    if err != nil {
+        return err
+    }
+    if response.ID == "" {
+        return errors.New("exec ID empty")
+    }
+
+    execStartConfig := &types.ExecStartCheck{
+        Detach: execCreateConfig.Detach,
+        Tty:    execCreateConfig.Tty,
+    }
+
+    if err := bs.DockerCli.ContainerExecStart(bs.ctx, response.ID, *execStartConfig); err != nil {
+        return err
+    }
+
+    return nil
+}
+
+// Runs `rndc reconfig` in the BIND server.
+// Reloads the configuration file and loads new zones, but does not reload existing zone files even if they have changed.
+func (bs *BindService) Reconfig() error {
+    return bs.exec([]string{"rndc", "reconfig"})
+}
+
+// Runs `rndc reload {zone}` in the BIND server
+func (bs *BindService) ReloadZone(zone string) error {
+    return bs.exec([]string{"rndc", "reload", zone})
+}
+\end{lstlisting}
 
 \subsection{Manejo de errores}
 
@@ -113,9 +301,6 @@ Cuando BIND sufre cambios en los ficheros de configuración estos no son detecta
 \subsection{Imagen de BIND 9}
 
 - Consideraciones a la hora de ejecutar el servicio de bind
-
-% TODO
-% La función principal del bloqueo es mantener la consistencia entre la información que se encuentra en memoria y en disco, asegurando que cada escritura en memoria tenga su sucesiva escritura en disco. La estructura de datos que almacena a $M_A$ puede implementar su propio mecanismo para manejar el acceso concurrente en memoria, de igual forma lo puede hacer el algoritmo que implementa la persistencia en $S_A$. Pero estos dos por separado no garantizan la sincronización memoria-disco ante el acceso concurrente a la API. Además, es importante poder recuperarse de un error de escritura en disco, sin corromper la información en memoria.
 
 \section{Experimentación}
 

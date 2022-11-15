@@ -1,10 +1,18 @@
 \chapter{Estado del Arte}\label{chapter:state-of-the-art}
 
+El objetivo principal del Sistema de Nombres de Dominio es el acceso a recursos en la red a través de un espacio de nombres. Anterior a este, en los años 1970, la red era una comunidad pequeña con unos pocos cientos de computadores. El mapeo del nombre de cada \textit{host} a su dirección era mantenido por el Centro de Información de Red (NIC, por sus siglas en inglés) en un archivo nombrado \verb+HOSTS.TXT+ [\cite{rfc_1034}].
+
+Al aumentar la red aparecen organizaciones y redes administradas de forma local cuyos administradores debían esperar por los cambios que solicitaban aplicar al \verb|HOSTS.TXT| vía correo, para posteriormente descargar el archivo actualizado mediante FTP. Como consecuencia de estas solicitudes aisladas, es posible que se traten de introducir nombres que colisionen. 
+
+% En sistemas de tipo Linux puede encontrarse en la ruta \verb+/etc/hosts+, mientras que en Windows esta ubicado en \verb+C:\Windows\System32\Drivers\etc\hosts+ pues este aún se consulta antes de resolver un dominio con un servidor de nombres.
+
+El hecho de clonar el archivo por todos los \textit{hosts}, trae como consecuencia un alto consumo de ancho de banda y poca escalabilidad ante el aumento del número de dispositivos de cómputo. Cada nuevo punto en la red significa una nueva línea en el archivo y otro posible cliente a quien servirlo. La carga generada en el servidor FTP de NIC es considerable y aumenta de formar cuadrática respecto al número de clientes [\cite{rfc_1034}].
+
+Se hace necesario tener una alternativa a dicho mecanismo. DNS como base de datos distribuida, jerárquica y altamente disponible soluciona dicho problema, además de aportar nuevas funcionalidades.
+
 \section{DNS}
 
-El objetivo principal del Sistema de Nombres de Dominio es el acceso a recursos en la red a través de un espacio de nombres. Anterior a este, el mapeo del nombre de cada \textit{host} a su dirección era mantenido por el Centro de Información de Red (NIC, por sus siglas en inglés) en un archivo nombrado \verb+HOST.txt+. En sistemas de tipo Linux podemos encontrarlo en la ruta \verb+/etc/hosts+, mientras que en Windows esta ubicado en \verb+C:\Windows\System32\Drivers\etc\hosts+ pues este aún se consulta antes de resolver un dominio con un servidor DNS. Dicho archivo era clonado por todos los \textit{hosts}, lo que traía como consecuencia un alto consumo de ancho de banda y poca escalabilidad ante el aumento del número de dispositivos de cómputo.
-
-Se hace necesario tener una alternativa a dicho mecanismo. DNS como base de datos distribuida, jerárquica y altamente disponible soluciona dicho problema, además de aportar nuevas funcionalidades. DNS tiene una estructura arbórea, donde cada nodo tiene un padre y una etiqueta de 1 a 63 caracteres de longitud, excepto el nodo raíz que es su propio padre y contiene la cadena vacía [\cite{Vixie_2007}]. Un nombre de dominio puede verse como un nodo en este contexto, mientras que, un nombre de dominio completamente calificado (FQDN, por sus siglas en inglés) es una representación de nodos, separados por un punto (\verb+.+). Por ejemplo, \verb+www.example.com+ es el FQDN para el dominio \verb+www+, cuyo padre es \verb+example+, abuelo \verb+com+ (TLD, del inglés \textit{Top Level Domain}) y bisabuelo el nodo raíz.
+DNS tiene una estructura arbórea, donde cada nodo tiene un padre y una etiqueta de 1 a 63 caracteres de longitud, excepto el nodo raíz que es su propio padre y contiene la cadena vacía [\cite{Vixie_2007}]. Un nombre de dominio puede verse como un nodo en este contexto, mientras que, un nombre de dominio completamente calificado (FQDN, por sus siglas en inglés) es una representación de nodos, separados por un punto (\verb+.+). Por ejemplo, \verb+www.example.com+ es el FQDN para el dominio \verb+www+, cuyo padre es \verb+example+, abuelo \verb+com+ (TLD, del inglés \textit{Top Level Domain}) y bisabuelo el nodo raíz.
 
 En la arquitectura actual encontramos lo dominios de más alto nivel (TLD) un nivel por debajo del nodo raíz. Estos son directamente gestionados por la IANA (\textit{Internet Assigned Numbers Authority}) y la lista se encuentra en la base de datos de la zona raíz\footnote{\url{https://www.iana.org/domains/root/db}}. La administración de los TLD es delegada a empresas y organizaciones en coordinación con la IANA para su mantenibilidad.
 
@@ -18,9 +26,9 @@ Los nodos (dominios) son agrupados en zonas, las cuales pueden considerarse un �
 
 Cada nodo puede poseer registros (en inglés \textit{resource records} (RRs)). Estos son los que contienen toda la información DNS en dependencia de su nombre, tipo, clase o datos [\cite{rfc_1035}]. Cada RR tiene un TTL (\textit{time to live}), que indica que tiempo puede estar almacenada la información del registro en un servidor secundario, después de que este llegue a cero es necesario volver a obtener el registro del servidor autoritario primario.
 
-\subsection{Consultas DNS}
+\subsection{Tipos de Consultas DNS}
 
-Una consulta DNS es resuelta por los diferentes servidores que componen la jerarquía de nodos. Comenzando desde el nodo raíz hasta el servidor autoritario que debe contener la información requerida si esta existe.
+Como resultado de disponer de una base de datos distribuida, un servidor puede recibir una consulta que solo otro servidor puede responder. Así, una consulta DNS puede ser resuelta por los diferentes servidores que componen la jerarquía de nodos. Comenzando desde el nodo raíz hasta el servidor autoritario que debe contener la información requerida si esta existe.
 
 \begin{figure}[!ht]
     \centering
@@ -28,32 +36,21 @@ Una consulta DNS es resuelta por los diferentes servidores que componen la jerar
     \caption{Resolución de una consulta DNS.}
 \end{figure}
 
-Existen tres tipos de consultas, de acuerdo al proceso que realizan los servidores para dar respuesta, estas son descritas a continuación.
+De forma estándar una consulta está compuestas por un dominio objetivo (\verb|QNAME|), un tipo (\verb|QTYPE|) y una clase (\verb|QCLASS|). El servidor DNS usa el \verb|QTYPE| y \verb|QCLASS| para dar respuesta a la consulta con el conjunto de RR relevantes. En adición a los registros retornados, el servidor puede apuntar a otro servidor de nombres que tiene información relevante para la consulta o útil para interpretar la información dada como respuesta.
 
-\begin{itemize}
-    \item \textbf{Consulta Recursiva}: el cliente DNS provee el nombre de un host y el \textit{DNS Resolver} es el encargado de darle respuesta con un registro relevante o un mensaje de error en el caso que no fuera encontrado. El \textit{resolver} inicia una consulta recursiva, comenzando desde el servidor raíz, hasta que encuentre el servidor de nombres autoritario para la consulta, el cual contiene la dirección IP u otra información con la que dar respuesta. 
-    
-    \item \textbf{Consulta Iterativa}: el cliente DNS provee el nombre de un host y el \textit{DNS Resolver} debe darle la mejor respuesta que tenga, dígase apuntarlo al servidor más probable de contener la respuesta a la consulta. Si el \textit{resolver} tiene el registro relevante para la consulta en su caché, este valor es dado como respuesta, sino el cliente es referido al servidor DNS raíz u otro servidor de nombres autoritario que sea más cercano a la zona deseada. Así, el cliente debe repetir la consulta al servidor al que fue referido.
-    
-    \item \textbf{Consulta No-Recursiva}: en esta consulta el \textit{resolver} ya conoce la respuesta y como resultado se la envía directamente al cliente. Esto puede suceder como resultado de que la tenía almacenada en caché o realizó una consulta directamente a un servidor autoritario para la consulta del cliente.
-\end{itemize}
+Existen dos tipos de consultas (no confundir con \verb|QTYPE|), de acuerdo al proceso que realizan los servidores para dar la respuesta. Estas son recursivas e iterativas. Son dos aproximaciones distintas para resolver la obtención de información en una base de datos jerárquica y distribuida. DNS requiere la implementación de la solución iterativa y deja de manera opcional la recursiva [\cite{rfc_1034}].
+
+En una consulta recursiva el cliente DNS provee el nombre de un host y el \textit{DNS Resolver} es el encargado de darle respuesta con un registro relevante o un mensaje de error en el caso que no fuera encontrado. El \textit{resolver} inicia esta consulta comenzando desde el servidor raíz, hasta que encuentre el servidor de nombres autoritario para la consulta, el cual contiene la dirección IP u otra información con la que dar respuesta.
+
+Por otra parte, la consulta iterativa comienza cuando el cliente DNS provee el nombre de un host y el \textit{DNS Resolver} debe darle la mejor respuesta que tenga, dígase apuntarlo al servidor de nombres más probable de contener la respuesta a la consulta. Si el \textit{resolver} tiene el registro relevante para la consulta en su caché, este valor es dado como respuesta, sino el cliente es referido al servidor DNS raíz u otro servidor de nombres autoritario que sea más cercano a la zona deseada. Así, el cliente debe repetir la consulta al servidor al que fue referido.
 
 \subsection{Registros y Extensibilidad}
 
 Los registros DNS han ido evolucionando a lo largo de los años desde el diseño inicial del sistema. Diferentes RFCs (\textit{Request for Comments}) han ido añadiendo nuevos registros y dejando obsoletos otros. Los principales motivos para estos cambios es añadir nuevas funciones a DNS y mejorar la seguridad del sistema. Otro caso son tipos de registros que aún no son obsoletos pero están en desuso o no son usados por ninguna aplicación notable.
 
-Algunos de los tipos de registros más comunes son mostrados a continuación con su correspondiente uso.
+Los registros son el punto final de la jerarquía DNS, donde un nodo puede contener un conjunto de estos, que puede ser vacío. Ante una consulta resuelta por el nodo da como respuesta con un subconjunto de los RR que él mantiene.
 
-\begin{itemize}
-    \item \verb+SOA+: indica que la zona es el inicio de autoridad para el dominio, y define parámetros como contacto del administrador, un serial para indicar cambios en la zona, el valor mínimo de TTL para los registros exportados y otros valores de interés para los servidores secundarios.
-    \item \verb+NS+: indica el servidor de nombres autoritario para el dominio.
-    \item \verb+A+ y \verb+AAAA+: mapea direcciones IP (IPv4 e IPv6) a nombres de dominio.
-    \item \verb+MX+: contiene información del host que se encarga del intercambio de correo, posee un campo para indicar la prioridad para cada host.\
-    \item \verb+TXT+: de propósito general, se usa para almacenar texto de forma descriptiva [\cite{rfc_1464}].
-    \item \verb+CNAME+: identifica el nombre canónico de un alias.
-\end{itemize}
-
-De forma general el RDATA de un registro puede contener cualquier información necesaria, esto hace posible diseñar y añadir nuevos registros al estándar para ampliar o mejorar la funcionalidad de DNS.
+Un RR esta conformado por diferentes campos. De forma general, tiene un propietario, que es el nombre de dominio dónde es encontrado, un tipo, algunos de los más comunes son \verb|SOA|, \verb|A|, \verb|NS|, \verb|MX|, \verb|CNAME|, y una clase que indica el protocolo al que pertenece y un TTL. Cada registro tiene finalmente un \verb|RDATA| dependiente de la clase y en ocasiones del tipo, por lo que puede contener información variada. Este puede ser un nombre de dominio, una dirección IP o incluso texto de propósito general, como es el caso del tipo \verb|TXT| [\cite{rfc_1464}].
 
 \subsection{Seguridad}
 
@@ -131,7 +128,9 @@ CoreDNS\footnote{\url{https://github.com/coredns/coredns}}, en su lugar, es muy 
 
 Knot\footnote{\url{https://gitlab.nic.cz/knot/knot-dns}} es un servidor DNS solo autoritario con un alto rendimiento, escrito en C. Soporta las características fundamentales del DNS actual, así como reconfiguración en tiempo de ejecución. El software esta orientado a sistemas operativos de tipo POSIX y su desarrollo va enfocado a las necesidades de la comunidad y usuarios donantes al proyecto.
 
-En el grupo de SaaS se encuentra Amazon Route 53\footnote{\url{https://aws.amazon.com/route53/}} con características esenciales para el internet actual. Dispone de cortafuegos para el \textit{resolver}, control de recuperación ante fallos, flujo de tráfico basado en geoproximidad, latencia, salud y otras consideraciones. Como es de esperar, soporta DNSSEC y hace uso de una interfaz gráfica en la web que permite realizar la gestión DNS sin manejar código o archivos de configuración.
+En el grupo de SaaS se encuentra Amazon Route 53\footnote{\url{https://aws.amazon.com/route53/}} con características esenciales para el internet actual. Dispone de cortafuegos para el \textit{resolver}, control de recuperación ante fallos, flujo de tráfico basado en geoproximidad, latencia, salud y otras consideraciones. Como es de esperar, soporta DNSSEC y hace uso de una interfaz gráfica en la web que permite realizar la gestión DNS sin manejar código o archivos de configuración. También ubicado en su propio ecosistema, muy rico en soluciones, está Google Cloud DNS, con características semejantes a las ofrecidas por el producto de Amazon: IAM (\textit{Identity Access Management}), \textit{logging}, DNSSEC, zonas privadas, integración nativa con Kubernetes, y muchas otras.
+
+Los demás servicios de pago como DNS Made Easy\footnote{\url{https://dnsmadeeasy.com/}}, DNSimple\footnote{\url{https://dnsimple.com/}} y NS1\footnote{\url{https://ns1.com}}, también ofrecen registro de nombres de dominio, API HTTP e interfaz web para su gestión. Los SaaS son especialmente útiles para empresas que posean un mercado estable y quieran dedicar menos tiempo a la gestión DNS. Además de mayor seguridad y margen de expansión haciendo uso de sistemas altamente escalables.
 
 % TODO: Describe DNS Made Easy
 
@@ -143,9 +142,15 @@ En el grupo de SaaS se encuentra Amazon Route 53\footnote{\url{https://aws.amazo
 
 % \subsection{Métodos Alternativos}
 
-\section{Golang}
+\section{Desarrollo Web}
 
-Go es un lenguaje compilado con tipado estático diseñado en Google, para el año 2007, por Robert Griesmen, Rob Pike y Ken Thompson. Fue desarrollado para afrontar los retos ingenieriles a los que se enfrentaban los ingenieros en Google. A día de hoy, desde su publicación en 2009, ha alcanzado una adopción masiva y empresas como Cloudflare, Dropbox, Meta, Microsoft, Netflix, PayPal, Twitter, Salesforce, Uber, entre otras, hacen uso de este lenguaje para servir millones de pedidos en escenarios de alta concurrencia con alta disponibilidad.                                                            
+TODO
+
+Las opciones de tecnologías para el desarrollo web actual son bastante amplias. La mayoría de los lenguajes de alto nivel tienen \textit{frameworks} o bibliotecas que facilitan el desarrollo. En desarrollo \textit{front-end} JS/TS\footnote{\url{https://www.typescriptlang.org/}} es el estándar, para \textit{back-end}, las principales diferencias en desarrollo y producción son introducidas por el lenguajes usado. La mayoría de las soluciones existentes en Python, C\#, Java, JS/TS, Go son de código abierto y vienen cargadas de características para disímiles escenarios de implementación.
+
+\subsection{Golang}
+
+Go es un lenguaje compilado con tipado estático diseñado en Google, para el año 2007, por Robert Griesmen, Rob Pike y Ken Thompson. Fue desarrollado para afrontar los retos ingenieriles a los que se enfrentaban los ingenieros en Google. A día de hoy, desde su publicación en 2009, ha alcanzado una adopción masiva y empresas como Cloudflare, Dropbox, Meta, Microsoft, Netflix, PayPal, Twitter, Salesforce, Uber, entre otras, hacen uso de este lenguaje para servir millones de pedidos en escenarios de alta concurrencia con alta disponibilidad. [\cite{go-docs}]
 
 La biblioteca estándar por si sola ofrece las herramientas necesarias para desarrollar una aplicación web. \textit{Encoding} y \textit{decoding} de JSON, validación de datos, implementación de cliente y servidor HTTP, sistema de plantillas HTML seguro contra inyecciones de código, \textit{drivers} para las bases de datos mas usadas, son algunas de las funcionalidades que vienen con el lenguaje.
 
@@ -159,7 +164,7 @@ El lenguaje hace uso de paquetes para separar el código lo que ayuda a la separ
 
 Para facilitar el desarrollo podemos encontrar de forma predeterminada en el lenguaje varias utilidades: manejo de dependencias, generación de documentación con ejemplos, formateo del código, automatización de tests y \textit{profiling}, son las principales. También es posible analizar los binarios puestos en producción a través de un servidor HTTP [\cite{go-pros-cons}].
 
-\subsection{APIs con Go}
+\subsubsection{APIs con Go}
 
 Como fue mencionado, existen diferente bibliotecas y frameworks para el desarrollo de servicios HTTP. Este entorno es bastante maduro pues el principal uso del lenguaje es escribir aplicaciones de \textit{back-end}.
 
@@ -173,9 +178,9 @@ Finalmente Gin, con más de 63800 estrellas en GitHub es uno de los frameworks m
 
 Puede concluirse que Go tiene un ambiente con bastas opciones para el desarrollo web. Los frameworks, aunque algunos más consolidados que otros, comparten varias características comunes: extensibilidad, validación de datos, \textit{middlewares} y el alto rendimiento típico del lenguaje. Estas cualidades junto con las herramientas estándar que ofrece el lenguaje hace del desarrollo un proceso bien definido a la hora de afrontar un nuevo proyecto.
 
-\section{Vue.js}
+\subsection{Vue.js}
 
-Vue.js\footnote{\url{https://github.com/vuejs/core}} es un framework progresivo de código abierto para crear interfaces de usuario en la web con Javascript. Es creado por Evan You después de trabajar para Google en varios proyectos con AngularJS. Vue tiene características similares a Angular, pero con una sintaxis más concisa y sencilla de usar. De igual forma ha adoptado ideas de otros frameworks y bibliotecas como React.
+Vue.js\footnote{\url{https://github.com/vuejs/core}} es un framework progresivo de código abierto para crear interfaces de usuario en la web con Javascript. Es creado por Evan You después de trabajar para Google en varios proyectos con AngularJS. Vue tiene características similares a Angular, pero con una sintaxis más concisa y sencilla de usar. De igual forma ha adoptado ideas de otros frameworks y bibliotecas como React. [\cite{vue-docs}]
 
 Ofrece un modelo de programación declarativo y basado en componentes que ayuda a desarrollar interfaces de usuario, tanto simples como complejas, de manera flexible. La comunidad ha desarrollado muchas bibliotecas opcionales que son activamente mantenidas, como son: Vue Router (enrutador para crear aplicaciones \textit{single-page}, SPA, por sus siglas en inglés), Pinia (biblioteca para manejo de estado), Vue Server Renderer (biblioteca para renderizado del lado del servidor), entre otras.
 
@@ -240,21 +245,21 @@ onMounted(() => {
     \end{lstlisting}
 \end{minipage}
 
-\subsection{Reactividad}
+\subsubsection{Reactividad}
 
 La reactividad es una de las principales características de Vue. Con esta cada componente mantiene una referencia a sus dependencias reactivas. De esta forma es posible para el sistema saber cuando renderizar o cual componente renderizar.
 
 En vainilla Javascript no es posible detectar cuando una variable local es leída o modifica. Vue hace uso de proxies (con objetos reactivos) o \textit{getters} y \textit{setters} (con \textit{refs}) para detectar dichos eventos y realizar el renderizado de la parte de la componente afectada.
 
-\subsection{Enrutamiento} 
+\subsubsection{Enrutamiento} 
 
 El enrutamiento en el lado del cliente es uno de los puntos fuertes de Vue. Permite crear SPAs que ofrecen una navegación más fluida al no cargar el HTML completo de la página para cada vista. La biblioteca Vue Router es oficialmente soportada por Vue y ofrece completa funcionalidad para implementar la navegación en el lado del cliente.
 
 Las peticiones al servidor son realizadas de acuerdo a la componente que es cargada, dejando libre a este de tener que generar HTML. Por lo general, el servidor solo debe disponer de una API REST o similar para servir la información a la página web.
 
-\section{Docker}
+\subsection{Docker}
 
-Docker brinda la capacidad de empaquetar y ejecutar una aplicación en un entorno aislado llamado contenedor. Los contenedores son livianos y contienen todo lo necesario para ejecutar la aplicación, por lo que no usan las dependencias instaladas en el \textit{host}. Un contenedor es creado a partir de una imagen, y estas se pueden compartir fácilmente asegurando que todas las personas que la reciben obtengan una versión que funciona de la misma manera. Adicionalmente permite manejar la infraestructura de la misma forma que se manejan las aplicaciones, lo que disminuye el tiempo entre escribir el código y llevarlo a producción.
+Docker brinda la capacidad de empaquetar y ejecutar una aplicación en un entorno aislado llamado contenedor. Los contenedores son livianos y contienen todo lo necesario para ejecutar la aplicación, por lo que no usan las dependencias instaladas en el \textit{host}. Un contenedor es creado a partir de una imagen, y estas se pueden compartir fácilmente asegurando que todas las personas que la reciben obtengan una versión que funciona de la misma manera. Adicionalmente permite manejar la infraestructura de la misma forma que se manejan las aplicaciones, lo que disminuye el tiempo entre escribir el código y llevarlo a producción. [\cite{docker-docs}]
 
 Docker hace especial uso de las características de Linux para el aislamiento de los contenedores, específicamente \verb|namespaces| para el aislamiento de los recursos del host y \verb|cgroups| para el control y limitación de esos recursos. A diferencia de una máquina virtual (MV) que realiza la virtualización sobre el hardware, un contenedor es un proceso corriendo en el sistema operativo, y como resultado se realiza la virtualización sobre este.
 
@@ -271,7 +276,7 @@ El entorno en que se encuentra Docker es muy rico, dispone de DockerHub\footnote
 
 Las imágenes de Docker tienen una arquitectura por capas, una se construye sobre las otra. Así, si dos imágenes tienen una capa en común, dicha capa no se almacena de forma duplicada en disco y comparten ambas la misma. Los contenedores pueden persistir información en volúmenes, los cuales son sumamente portables, incluso entre sistemas operativos. La comunicación entre los servicios (contenedores) de Docker esta aislada al sistema, y se debe especificar los puertos que se necesiten exponer para dar acceso al exterior. Estos también pueden ser orquestados con Docker Swarm\footnote{\url{https://docs.docker.com/engine/swarm/}} o Kubernetes\footnote{\url{https://kubernetes.io/es/}}, lo que permite escalabilidad en producción acorde a las necesidades de cada servicio.
 
-\subsection{Compose}
+\subsubsection{Compose}
 
 Compose es una herramienta para la definición y ejecución de aplicaciones con múltiples contenedores [\cite{docker-compose}]. Usa un archivo YAML como configuración, en el que se declaran los servicios, redes, volúmenes y otros objetos de Docker de los que va a hacer uso la aplicación. Es capaz de iniciar, detener y reiniciar contenedores, consultar el estado y los \textit{logs} de los servicios en ejecución, así como ejecutar comandos directamente sobre los servicios.      
 
