@@ -38,7 +38,7 @@ Este procedimiento tiene como objetivo exponer cada una de las zonas con su conj
 
 Para definir \verb+save+, es necesario considerar que existe un mecanismo de comunicación $C_A$ entre el servicio de la API y $A$. Sean $h(C_A)$ una función que indica a $A$ que su configuración en $S_A$ ha sido modificada, $f(M_A, u)$ la función que almacena de forma estructurada en el almacenamiento de la API las modificaciones $u$ enviados a esta y $g(S_A, u)$ la función que persiste el conjunto de modificaciones $u$ de forma estructurada en el sistema de almacenamiento de $A$. Entonces, se define \verb+save+ de la siguiente manera.
 
-\begin{algorithmic}
+\begin{algorithmic}\label{proc:save}
 \Procedure{save}{$A$, $u$}
     \State $M_A' \leftarrow f(M_A, u)$
     \State $g(S_A, u)$
