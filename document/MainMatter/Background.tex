@@ -2,7 +2,7 @@
 
 El objetivo principal del Sistema de Nombres de Dominio es el acceso a recursos en la red a través de un espacio de nombres. Anterior a este, en los años 1970, la red era una comunidad pequeña con unos pocos cientos de computadores. El mapeo del nombre de cada \textit{host} a su dirección era mantenido por el Centro de Información de Red (NIC, por sus siglas en inglés) en un archivo nombrado \verb+HOSTS.TXT+ [\cite{rfc_1034}].
 
-Al aumentar la red aparecen organizaciones y redes administradas de forma local cuyos administradores debían esperar por los cambios que solicitaban aplicar al \verb|HOSTS.TXT| vía correo, para posteriormente descargar el archivo actualizado mediante FTP. Como consecuencia de estas solicitudes aisladas, es posible que se traten de introducir nombres que colisionen. 
+Al aumentar la red aparecen organizaciones y redes administradas de forma local cuyos administradores debían esperar por los cambios que solicitaban aplicar al \verb|HOSTS.TXT| vía correo, para posteriormente descargar el archivo actualizado mediante FTP. Uno de los problemas de estas solicitudes aisladas, es que se traten de introducir nombres que colisionan. 
 
 % En sistemas de tipo Linux puede encontrarse en la ruta \verb+/etc/hosts+, mientras que en Windows esta ubicado en \verb+C:\Windows\System32\Drivers\etc\hosts+ pues este aún se consulta antes de resolver un dominio con un servidor de nombres.
 
@@ -102,7 +102,7 @@ Como fue mencionado en la Motivación, existen alternativas a BIND 9. En la tabl
     \centering
     \begin{tabular}{|l|c|c|c|c|c|}
     \hline
-        Software & Pago & API HTTP & UI & Nube & Código Abierto \\ \hline
+        Software & Pago & API HTTP & Web UI & Nube & Código Abierto \\ \hline
         BIND 9 & $\times$ & $\times$ & $\times$ & $\times$ & \checkmark \\ \hline
         PowerDNS & $\times$ & \checkmark & $\times$ & $\times$ & \checkmark \\ \hline
         CoreDNS & $\times$ & $\times$ & $\times$ & $\times$ & \checkmark \\ \hline
@@ -132,21 +132,9 @@ En el grupo de SaaS se encuentra Amazon Route 53\footnote{\url{https://aws.amazo
 
 Los demás servicios de pago como DNS Made Easy\footnote{\url{https://dnsmadeeasy.com/}}, DNSimple\footnote{\url{https://dnsimple.com/}} y NS1\footnote{\url{https://ns1.com}}, también ofrecen registro de nombres de dominio, API HTTP e interfaz web para su gestión. Los SaaS son especialmente útiles para empresas que posean un mercado estable y quieran dedicar menos tiempo a la gestión DNS. Además de mayor seguridad y margen de expansión haciendo uso de sistemas altamente escalables.
 
-% TODO: Describe DNS Made Easy
-
-% TODO: Describe Google Cloud DNS
-
-% TODO: Describe DNSimple
-
-% \section{API REST}
-
-% \subsection{Métodos Alternativos}
-
 \section{Desarrollo Web}
 
-TODO
-
-Las opciones de tecnologías para el desarrollo web actual son bastante amplias. La mayoría de los lenguajes de alto nivel tienen \textit{frameworks} o bibliotecas que facilitan el desarrollo. En desarrollo \textit{front-end} JS/TS\footnote{\url{https://www.typescriptlang.org/}} es el estándar, para \textit{back-end}, las principales diferencias en desarrollo y producción son introducidas por el lenguajes usado. La mayoría de las soluciones existentes en Python, C\#, Java, JS/TS, Go son de código abierto y vienen cargadas de características para disímiles escenarios de implementación.
+Las opciones de tecnologías para el desarrollo web actual son bastante amplias. La mayoría de los lenguajes de alto nivel tienen \textit{frameworks} o bibliotecas que facilitan el desarrollo. En desarrollo \textit{front-end} JS/TS\footnote{\url{https://www.typescriptlang.org/}} es el estándar, para \textit{back-end}, las principales diferencias en desarrollo y producción son introducidas por el lenguaje usado. La mayoría de las soluciones existentes en Python, C\#, Java, JS/TS, Go son de código abierto y vienen cargadas de características para disímiles escenarios de implementación.
 
 \subsection{Golang}
 
@@ -257,7 +245,7 @@ El enrutamiento en el lado del cliente es uno de los puntos fuertes de Vue. Perm
 
 Las peticiones al servidor son realizadas de acuerdo a la componente que es cargada, dejando libre a este de tener que generar HTML. Por lo general, el servidor solo debe disponer de una API REST o similar para servir la información a la página web.
 
-\subsection{Docker}
+\subsection{Docker}\label{sec:docker}
 
 Docker brinda la capacidad de empaquetar y ejecutar una aplicación en un entorno aislado llamado contenedor. Los contenedores son livianos y contienen todo lo necesario para ejecutar la aplicación, por lo que no usan las dependencias instaladas en el \textit{host}. Un contenedor es creado a partir de una imagen, y estas se pueden compartir fácilmente asegurando que todas las personas que la reciben obtengan una versión que funciona de la misma manera. Adicionalmente permite manejar la infraestructura de la misma forma que se manejan las aplicaciones, lo que disminuye el tiempo entre escribir el código y llevarlo a producción. [\cite{docker-docs}]
 

@@ -9,13 +9,13 @@ Para la gestión de servidores DNS existen diversos softwares adoptados. DNSimpl
 
 \section{Motivación}
 
-En el conjunto de soluciones actuales se puede dividir en dos grupos. Un primer grupo que es de código abierto, pero requiere de un alto nivel técnico para su configuración, además de no poseer una interfaz de usuario, ya sea web o \textit{desktop}, ni dispone de una API HTTP. Un segundo basado en la nube, que sí ofrece su servicio vía API y generalmente con una interfaz web amigable, pero son de pago y código cerrado. Dentro de los segundos servicios, existen algunos como Amazon Route 53 y Google Cloud DNS que se encuentran vinculados a un entorno que ofrece más soluciones a la hora de desplegar un sistema. Pero los costos de uso no son despreciables y están altamente acoplados a los demás servicios en la nube.
+En el conjunto de soluciones actuales se puede dividir en dos grupos. Un primer grupo que es de código abierto, pero requiere de un alto nivel técnico para su configuración, además de no poseer una interfaz de usuario de tipo web o \textit{desktop}, ni dispone de una API HTTP. Un segundo basado en la nube, que sí ofrece su servicio vía API y generalmente con una interfaz web amigable, pero son de pago y código cerrado. Dentro de los segundos servicios, existen algunos como Amazon Route 53 y Google Cloud DNS que se encuentran vinculados a un entorno que ofrece más soluciones a la hora de desplegar un sistema. Pero los costos de uso no son despreciables y están altamente acoplados a los demás servicios en la nube.
 
 Los proyectos de código abierto ofrecen soluciones altamente adaptables para su despliegue y reciben contribuciones de la comunidad que las convierten en un producto  de software sólido. La existencia de una API e interfaz de usuario compatible con algunos de los servidores DNS de código abierto sería de mucha utilidad para alcanzar el nivel de funcionalidad de servicios de pago basados en la nube.
 
-\section{Antecedentes}
+% \section{Antecedentes}
 
-Hablar sobre la tesis anterior que trabajo sobre este tema u otro trabajo relacionado en el nodo uh.
+% Hablar sobre la tesis anterior que trabajo sobre este tema u otro trabajo relacionado en el nodo uh.
 
 \section{Problemática}
 
@@ -23,10 +23,12 @@ Los DNS actualmente en la Universidad de La Habana utilizan BIND 9, el cual es e
 
 \section{Hipótesis}
 
+Basado en la especificidad del sistema DNS, proponer un arquitectura aplicable a los distintos servidores DNS autoritarios de código abierto. Dicha arquitectura debe exponer una API HTTP capaz de realizar cambios sobre la configuración del servidor y que este los refleje mientras esta en ejecución.
+
 \section{Objetivos}
 Esta tesis se propone como objetivos:
 \begin{itemize}
-    \item Investigación sobre el estado del arte en temas: PgSQL, DNS, BIND 9, Golang Gin, Vue.js, Ciberseguridad.
+    \item Investigación sobre el estado del arte en temas: DNS, BIND 9, Golang, Gin, Vue.js, Ciberseguridad.
     \item Implementación de CRUDs para dominios, subdominios y tipos de registros, expuesto en servicio REST.
     \item Implementación algoritmo de escritura de configuración DNS en sintaxis BIND 9.
 \end{itemize}
@@ -41,6 +43,7 @@ Se propone como solución la implementacíón de \textit{parsers} para los archi
 
 Hacer uso de una arquitectura de microservicios con tres servicios fundamentales. Una API REST implementada en Go y Gin la cual mantiene en memoria la configuración de BIND 9,  y procesa las solicitudes para actualizar dicha base de datos. Como segundo servicio una interfaz web (SPA), creada con Vue, con renderizado del lado del cliente que permita, a través de la API, el acceso a la configuración de BIND 9 de forma sencilla. Finalmente el servicio de BIND 9, que hace función de servidor DNS autoritario. Estos servicios son ejecutados sobre contenedores de Docker y desplegados con \verb+docker-compose+. Ambos servicios, la API y BIND 9 comparten el mismo volumen donde es almacenada la configuración del servidor DNS y cualquier acción directa del primero sobre el segundo es realizada a través del servicio de Docker.
 
-Además se ofrece un método para extender el sistema con nuevos tipos de registros de forma relativamente sencilla. De esta forma, hacer posible aumentar la gramática del \textit{parser} de los archivos de zona, y aceptar nuevos registros que puedan ser añadidos al estándar.
-
 \section{Estructura de la Tesis}
+
+El presente capítulo muestra la introducción a la problemática abordada
+por la tesis así como su motivación, objetivos y propuesta. El capítulo \ref{chapter:state-of-the-art} presenta el estudio realizado sobre el estado del arte respecto a DNS, BIND 9 y desarrollo web, así como una comparación entre las diferentes soluciones DNS actuales. En el capítulo \ref{chapter:proposal} se propone una arquitectura y el marco teórico de dos funciones: \verb|load| y \verb|save|, que intervienen en la solución. Luego, se realiza un análisis de la propuesta sobre BIND 9 y se desarrolla la implementación sobre el mismo. Finalmente, se muestra la validación de la solución desarrollada por esta tesis, se describe el entorno de desarrollo empleado para la realización de las pruebas y se discuten los resultados de las mismas. Por último, se presentan las conclusiones y las recomendaciones para trabajos futuros.

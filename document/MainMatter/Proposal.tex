@@ -1,10 +1,12 @@
 \chapter{Propuesta}\label{chapter:proposal}
 
-A partir del estudio hecho en el capítulo anterior podemos asumir que sería beneficioso para las soluciones actuales de código abierto disponer de una API HTTP que permita la configuración de estos de forma programática. Facilitaría la integración con diferentes tipos de interfaces de usuario, ya sea web, de escritorio o una plataforma de terceros. Esta es una característica decisiva para la adopción de más usuarios, por ello los diferentes SaaS apuestan por ella y la ofrecen dentro de sus planes de pago.
+A partir del estudio hecho en el capítulo anterior podemos asumir que sería beneficioso para las soluciones actuales de código abierto disponer de una API HTTP que permita su configuración de forma programática. Facilitaría la integración con diferentes tipos de interfaces de usuario, ya sea web, de escritorio o una plataforma de terceros. Esta es una característica decisiva para la adopción de más usuarios, por ello los diferentes SaaS apuestan por ella y la ofrecen dentro de sus planes de pago.
 
-De forma subyacente los diferentes servidores DNS están sujetos a la implementación de DNS propuesta en los RFC. Por tanto cada uno de los servidores de nombres debe tener el mismo punto de vista respecto al sistema. Poseer de un sistema de almacenamiento para persistir los diferentes conjuntos de RR en cada zona e implementar las características de DNS actual, tanto las requeridas como las opcionales. Estos puntos en común que deben compartir las diferentes implementaciones de servidores DNS sientan las bases para asumir los aspectos en los que sustentar la propuesta teórica de una API HTTP sobre ellos.
+Dicha solución sería de especial utilidad en la Universidad de La Habana, institución que por diferentes motivos no hace uso de los SaaS para su solución DNS. En el centro es empleado BIND 9 como servidor de nombres y mantenido por profesionales de la computación en el Nodo UH. Modificaciones básicas, como es añadir un nuevo dominio, serían mucho mas simple a través de una interfaz de usuario. Por lo que una API HTTP compatible con los servidores DNS de código abierto es un paso de avance en el desarrollo de tal objetivo.
 
-Como propuesta de solución a la implementación de una API para los diferentes softwares de servidores DNS autoritarios de código abierto, se propone un arquitectura en la que API tiene acceso al sistema de almacenamiento de la configuración DNS para su manejo. Además existe un medio de comunicación entendible por la API y el servidor DNS para desarrollar cualquier intercambio de información necesario.
+De forma subyacente los diferentes servidores DNS están sujetos a la implementación de DNS propuesta en los RFC. Por tanto, cada uno de los servidores de nombres debe tener el mismo punto de vista respecto al sistema. Poseer de un sistema de almacenamiento para persistir los diferentes conjuntos de RR en cada zona e implementar las características de DNS actual, tanto las requeridas como las opcionales. Estos puntos en común que deben compartir las diferentes implementaciones de servidores DNS sientan las bases para asumir los aspectos en los que sustentar la propuesta teórica de una API HTTP sobre ellos.
+
+Como propuesta de solución a la implementación de una API para los diferentes softwares de servidores DNS autoritarios de código abierto, se propone un arquitectura en la que la API tiene acceso al sistema de almacenamiento de la configuración DNS para su modificación. Además existe un medio de comunicación entendible por la API y el servidor DNS para desarrollar cualquier intercambio de información necesario.
 
 \begin{figure}[!ht]
     \centering
@@ -14,7 +16,7 @@ Como propuesta de solución a la implementación de una API para los diferentes 
 
 La hipótesis teórica se basa en dos funciones: \verb+load+ para la lectura de los archivos de configuración desde un sistema de almacenamiento y \verb+save+ para la persistencia de los cambios realizados a dicho sistema. Estas funciones expuestas en una API HTTP, o similar, permiten realizar las funciones fundamentales de configuración sobre el servidor DNS.
 
-En la sección 3.1 se describe el mecanismo carga de la configuración a través de la función \verb|load|. La sección 3.2 desarrolla el funcionamiento de \verb|save|, cómo esta asegura la correctitud de los cambios realizados en la configuración DNS y notifica al servidor DNS sobre estos.
+En la sección 3.1 se describe el mecanismo de carga de la configuración a través de la función \verb|load|. La sección 3.2 desarrolla el funcionamiento de \verb|save|, cómo esta asegura la correctitud de los cambios realizados en la configuración DNS y notifica al servidor DNS sobre estos.
 
 \section{Lectura de la Configuración DNS}
 
@@ -58,3 +60,5 @@ Cuando se evalúa $f$ son realizadas las validaciones para garantizar que los ca
 En caso de errores ambos sistemas deben quedar en el estado anterior a la ejecución de los cambios y la API debe retornar una respuesta indicando el error al completar el pedido. Para ello debe ser implementado un mecanismo que ejecute un \textit{rollback} de forma apropiada.
 
 La interfaz de comunicación es explícitamente necesaria para notificar al servidor DNS de cambios. Por lo que cualquier tipo de protocolo factible para este fin es aceptable. En caso que el servidor de nombres sea capaz de detectar cambios en su configuración de forma autónoma en tiempo de ejecución, la invocación a $h$ puede ser omitida en la implementación.
+
+De esta forma quedan definidas las bases que forman parte de la arquitectura a implementar. Una API HTTP que gestiona directamente los archivos de configuración del servidor de nombres a través de dos funciones, \verb|load| y \verb|save|. Un mecanismo de comunicación entre el servicio de la API HTTP y el servidor DNS para notificar de actualizaciones si es necesario. Adicionalmente, la necesidad de un mecanismo para manejar errores y recuperarse de ellos.

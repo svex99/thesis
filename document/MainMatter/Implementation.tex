@@ -6,9 +6,9 @@ En el presente capítulo se discutirán primeramente las características del si
 
 En las secciones posteriores, de la 4.3 a la 4.5, se describe como fueron desarrolladas la funciones de la propuesta y que alternativas fue necesario tomar en su implementación. También se muestran las principales consideraciones para manejar errores antes los pedidos y como garantizar la sincronización entre los datos que maneja la API y el servidor de nombres.
 
-Finalmente, en la sección 4.6, se discute el despliegue de los servicios con Docker y Compose, así como las imágenes usadas en el proceso. Finalmente, se plantean los experimentos realizados y se discuten sus resultados.
+En la sección 4.6, se discute el despliegue de los servicios con Docker y Compose, así como las imágenes usadas en el proceso. Finalmente, se plantean los experimentos realizados y se discuten sus resultados.
 
-\section{Sistema de Almacenamiento}
+\section{Sistema de Almacenamiento}\label{sec:bind-storage}
 BIND usa como sistema de almacenamiento para el servidor DNS archivos de texto plano. En estos archivos se almacena tanto la configuración del servidor autoritario o secundario, como los archivos de zona con sus registros. En la imagen de Docker de BIND basada en Ubuntu\footnote{\url{https://hub.docker.com/r/ubuntu/bind9}} se pueden encontrar los archivos de configuración y de zona en los directorios \verb+/etc/bind+ y \verb+/var/lib/bind+ respectivamente.
 
 \begin{lstlisting}[frame=single, numbers=none, caption=Contenido del directorio \textbf{/etc/bind}.]
@@ -270,9 +270,7 @@ Las estructuras de datos resultantes almacenadas en \verb|BindService.BindConf| 
 
 \subsection{Almacenamiento en Memoria vs Disco}
 
-Para la solución inicialmente fue considerada cargar la configuración del servidor DNS a una base de datos. Dicha solución fue desechada en favor de almacenarla en memoria. La principal desventaja de esto es tener que implementar algunos mecanismos de validación que pueden ser declarados de forma relativamente sencilla con SQL. Pero trae varias ventajas consigo, la primera y más importante es no tener dos fuentes de verdad (base de datos de la API y base de datos del servidor DNS), así cada vez que se inicie la API se garantiza que la información que sirve está sincronizada con la configuración del servidor DNS, el cual en última instancia es quien debe tener la información precisa pues es quien provee el servicio DNS.
-
-Además, se pude obtener menores valores de latencia, dado que el acceso a valores aleatorios en memoria es mucho más rápido que en disco (HDD o SSD)[\cite{jacobs2009pathologies}]. Además, el uso de un sistema gestor de base de datos requiere de mayores recursos de cómputo, y estamos hablando de un escenario donde se está manejando un volumen de información aceptable para ser ubicado en memoria.
+Para la solución inicialmente fue considerada cargar la configuración del servidor DNS a una base de datos. Dicha solución fue desechada en favor de almacenarla en memoria. La principal desventaja de esto es tener que implementar algunos mecanismos de validación que pueden ser declarados de forma relativamente sencilla con SQL. Pero trae varias ventajas consigo, la primera y más importante es no tener dos fuentes de verdad (base de datos de la API y base de datos del servidor DNS), así cada vez que se inicie la API se garantiza que la información que sirve está sincronizada con la configuración del servidor DNS, el cual en última instancia es quien debe tener la información precisa pues es quien provee el servicio DNS. Además, se pude obtener menores valores de latencia, dado que el acceso a valores aleatorios en memoria es mucho más rápido que en disco (HDD o SSD)[\cite{jacobs2009pathologies}].
 
 \section{Escritura de la Configuración DNS}
 
@@ -282,9 +280,9 @@ Como indica la función \verb+save+, es necesario mantener actualizada la copia 
 
 En la propuesta, \verb|save| recibe como parámetros un servidor de nombres $A$ y una actualización a aplicar $u$. Dicha actualización puede ser uno de diferentes eventos, ya definidos en la Tabla \ref{table:rndc-event}. Donde la modificación de una zona puede ser de forma específica añadir, modificar o eliminar uno de los registros de la zona.
 
-Por tanto $u$ puede verse como un elemento de un conjunto de posibles eventos, y sería necesario verificar antes de procesar $u$ dentro de \verb|save| que tipo de evento es el recibido. Una implementación que cubra esta lógica puede comprometer la legibilidad de \verb|save| (código espagueti), además de resultar en una función más difícil de mantener y comprobar. Adicionalmente no todas las modificaciones a la configuración requieren modificar la misma cantidad de archivos o invocar el mismo comando de \verb|rndc|. En el caso de añadir una nueva zona, es necesario modificar la configuración del servidor así como el archivo de la nueva zona, mientras que al modificar la zona, solo el archivo de zona, y como se analizó en \ref{section:comm-bind} los comandos de \verb|rndc| a usar en cada caso son distintos.
+Por tanto $u$ puede verse como un elemento de un conjunto de posibles eventos, y sería necesario verificar antes de procesar $u$ dentro de \verb|save| que tipo de evento es el recibido. Una implementación que cubra esta lógica puede comprometer la legibilidad de \verb|save|, dado que genera código espagueti, además de resultar en una función más difícil de mantener y comprobar. Además, se debe tener en cuenta que no todas las modificaciones a la configuración requieren modificar la misma cantidad de archivos o invocar el mismo comando de \verb|rndc|. En el caso de añadir una nueva zona, es necesario modificar la configuración del servidor así como el archivo de la nueva zona, mientras que al modificar la zona, solo el archivo de zona, y como se analizó en \ref{section:comm-bind} los comandos de \verb|rndc| a usar en cada caso son distintos.
 
-Consecuencia de ello, en la implementación se decide dividir \verb|save| en un conjunto de funciones (ver Figura \ref{fig:split-save}) que siguen cada uno de los estados que esta define, pero que manejan cada tipo de evento por separado. Adicionalmente cada una de estas funciones está directamente relacionada con un punto final de la API.
+Consecuencia de ello, en la implementación se decide dividir \verb|save| en un conjunto de funciones (ver Figura \ref{fig:split-save}), que siguen cada uno de los estados que esta define, pero que manejan cada tipo de evento por separado. Adicionalmente, cada una de estas funciones está directamente relacionada con un punto final de la API.
 
 \begin{figure}[!ht]
     \centering
@@ -293,7 +291,7 @@ Consecuencia de ello, en la implementación se decide dividir \verb|save| en un 
     \label{fig:split-save}
 \end{figure}
 
-Un cambio en la configuración por alguna de estas funcione es originado por una invocación a los puntos finales de la API. Por tanto cabe la posibilidad de que se realicen de forma concurrente en memoria. Siendo así se hace necesario limitar el acceso concurrente de escritura para evitar la corrupción de los datos haciendo uso de una instancia de \verb|sync.Mutex|. Cuando una modificación arriba a la API, la función a ser invocada toma acceso sobre este bloqueo, realiza la escritura en disco y memoria y luego lo libera.
+Un cambio en la configuración por una función derivada de \verb|save| es originado por una invocación a los puntos finales de la API. Por tanto cabe la posibilidad de que se traten de realizar de forma concurrente en memoria. Siendo así, se hace necesario limitar el acceso concurrente de escritura para evitar la corrupción de los datos haciendo uso de una instancia de \verb|sync.Mutex|. Cuando una modificación arriba a la API, la función a ser invocada toma el control sobre este bloqueo, realiza la escritura en disco y memoria y luego lo libera.
 
 La función principal del bloqueo es mantener la consistencia entre la información que se encuentra en memoria y en disco, asegurando que cada escritura en memoria tenga su sucesiva escritura en disco. El AST puede implementar su propio mecanismo para manejar el acceso concurrente en memoria, de igual forma se puede hacer a la hora de implementar la escritura en los archivos de configuración del disco. Pero estos dos por separado no garantizan la sincronización memoria-disco ante el acceso concurrente a la API. Además, es importante poder recuperarse de un error de escritura en disco, sin corromper la información en memoria.
 
@@ -471,19 +469,118 @@ Cuando se notifica al servidor de nombres para que actualice su servicio con los
 
 \section{Despliegue de los Servicios}
 
+Los diferentes servicios que conforman el sistema están diseñados para ser ejecutados sobre Docker. Las diferentes ventaja de esta tecnología fueron mostradas en la sección \ref{sec:docker} del Estado del Arte. Su aplicación en este escenario facilita la portabilidad y el acceso seguro de los archivos de configuración que van a compartir la API y el servidor de BIND.
+
 \subsection{Ejecución con Compose}
 
-- Discutir el docker-compose.yml creado.
+Compose como herramienta para el despliegue de sistemas con múltiples contenedores es de gran utilidad en el proceso. Desde la fase de desarrollo fue empleado para crear el ambiente donde implementar toda la funcionalidad del proyecto. Esto hace que la transición al despliegue del mismo no sea tan compleja.
 
-- Interacción con los volúmenes compartidos entre la api y bind.
+Para hacer uso de Compose se declaró un archivo \verb|docker-compose| con los diferentes servicios, volúmenes y la red privada en la que va a estar desplegada el sistema. Dicho archivo es mostrado a continuación para luego discutir sus aspectos principales.
 
-\subsection{Imagen para la API}
+\begin{lstlisting}[frame=single, caption=\textbf{docker-compose.yml} creado para el manejo de los servicios en la arquitectura]
+version: "3.8"
 
-- Discutir las principales consideraciones a la hora de contenedorizar la API.
+services:
+    bind-server:
+        image: docker.uclv.cu/ubuntu/bind9
+        container_name: bind-server
+        environment:
+            - TZ=UTC
+            - BIND9_USER=bind
+        ports:
+            - "30053:53"
+        volumes:
+            - bind-conf:/etc/bind
+            - bind-lib:/var/lib/bind
+            - bind-cache:/var/cache/bind
+            - bind-log:/var/log
+        networks:
+            bind-services:
+            ipv4_address: 172.30.10.1
 
-\subsection{Imagen de BIND 9}
+    bind-api:
+        depends_on:
+            - bind-server
+        image: bind-api
+        container_name: bind-api
+        build:
+            dockerfile: docks/api.Dockerfile
+            context: .
+        ports:
+            - 2020:2020
+        volumes:
+            - bind-conf:/go/src/data/bind/conf
+            - bind-lib:/go/src/data/bind/lib
+            - bind-api-data:/go/src/data/api/
+        dns:
+            - 172.30.10.1
+        networks:
+            bind-services:
+            ipv4_address: 172.30.10.2
 
-- Consideraciones a la hora de ejecutar el servicio de bind
+networks:
+    bind-services:
+        name: bind-services
+        driver: bridge
+        ipam:
+            driver: default
+            config:
+            - subnet: 172.30.10.0/16
+
+volumes:
+    bind-conf:
+        external: true
+    bind-lib:
+        external: true
+    bind-cache:
+    bind-log:
+    bind-api-data:
+        external: true
+\end{lstlisting}
+
+La API comparte con BIND los volúmenes \verb|bind-conf| y \verb|bind-lib|, el primero almacena a configuración del servidor DNS, mientras que el segundo es en el que van a estar almacenadas las zonas que este manejando el servidor de nombres. Estos volúmenes deben ser creados de forma externa con el comando \verb|docker volume create <vol-name>|.
+
+Ubicar a ambos servicios en una misma red privada permite mantenerlos aislados en su comunicación del \textit{host} y garantizar su comunicación de forma más directa. Cada servicio solo expone los puertos que son necesarios, la API un puerto por el que va a recibir pedidos el servidor de Gin, y BIND los puertos necesarios para el funcionamiento del servicio DNS.
+
+Para el servicio de BIND 9 fue usada la imagen que ofrece Ubuntu en DockerHub ya mencionada en la sección \ref{sec:bind-storage}. La imagen de la API fue creada usando construcción de varias etapas (\textit{multi-stage build}) para minimizar el tamaño de la imagen en producción considerablemente [\cite{multi-stage}].
+
+\begin{lstlisting}[frame=single, escapechar=|, caption=Dockerfile para la API.]
+FROM docker.uclv.cu/golang:1.19.2 as base
+
+ENV GIN_MODE=release
+ENV PORT=2020
+ENV CGO_ENABLED=0
+
+WORKDIR /go/src/
+
+COPY vendor vendor/
+COPY . .
+
+RUN go build -mod=vendor -o build/bind-api
+
+VOLUME [ "/go/src/data/bind/conf", "/go/src/data/bind/lib", "/go/src/data/api" ]
+
+EXPOSE 2020
+
+CMD ["./build/bind-api"]
+
+
+FROM scratch|\label{line:2nd-stage}|
+
+COPY --from=base /go/src/build/bind-api /usr/bin/bind-api
+
+VOLUME [ "/data/bind/conf", "/data/bind/lib", "/data/api" ]
+
+EXPOSE 2020
+
+CMD ["bind-api"]
+\end{lstlisting}
+
+En una primera etapa (\verb|base|) se usa como base la imagen la imagen de Go, \verb|golang:1.19.2|, a ella se copian las dependencias del proyecto previamente creadas por \verb|go mod vendor|. Finalizando la primera etapa se crea el archivo binario y se especifican los volumen y el puerto que va a exponer la API para las conexiones TCP.
+
+La segunda etapa (línea \ref{line:2nd-stage}) tiene como objetivo crear una imagen con el número mínimo de artefactos y que solo contenga el binario de la aplicación. Esto se logra copiando tan solo el binario compilado del código fuente en la primera etapa, el cual tiene todas las dependencias contenidas. Como en la primera etapa, en esta son especificados los volúmenes y el puerto  a usar. En esta se usa como base la imagen \verb|scratch|\footnote{\url{https://hub.docker.com/_/scratch}}, una imagen especial de Docker la cual no crea una capa extra al ser usada como base, por tanto la imagen resultante tendrá solo 4 capas, en lugar de 5.
+
+Con el empleo de esta aproximación se logra disminuir considerablemente el tamaño de la imagen resultante. La primera etapa da como resultado una imagen de 1.15GB de tamaño, mientras que la segunda tan solo 19MB. Se reduce el tamaño final aproximadamente un 98.3\% al eliminar el SDK de Go y otras herramientas que trae la imagen de Go por defecto, pero que no son necesarias en producción, dado que la aplicación es compilada en un solo archivo binario que se comunica directamente con el sistema operativo.
 
 \section{Experimentación}
 
