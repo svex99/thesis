@@ -3,7 +3,7 @@ Fue analizado que las soluciones DNS actuales de código abierto en su mayoría 
 
 La presente tesis propuso una arquitectura basada en dos funciones \verb|load| y \verb|save| para gestionar el sistema de almacenamiento de los servidores DNS de código abierto. Dichas funciones tienen como objetivo cargar la configuración del servidor DNS y escribir cambios al disco respectivamente. Estas se encuentran ubicada en un entorno más amplio, orientado a microservicios, que sienta las bases para la interacción entre la API, el sistema de almacenamiento del servidor DNS, y dicho servidor.
 
-La implementación computacional se implementó sobre BIND 9, software representativo y que es usado actualmente en la Universidad de La Habana como solución DNS. Se usó Go y Gin para la implementación de la API, un proceso de \textit{parsing} para la manipulación de las configuración DNS, Docker para el despliegue de los microservicios y Vue.js para la implementación de la aplicación web.
+La implementación computacional se implementó sobre BIND 9, software representativo y que es usado actualmente en la Universidad de La Habana como solución DNS. Se usó Go y Gin para la implementación de la API, un proceso de \textit{parsing} para la manipulación de la configuración DNS, Docker para el despliegue de los microservicios y Vue.js para la implementación de la aplicación web.
 
-- TODO: hablar de la experimentación
+Las pruebas realizadas comprobaron la validez de la propuesta teórica y la efectividad de la implementación sobre BIND 9. En este sentido se discute y aprueba la factibilidad de aplicar el software al servicio DNS de la Universidad de La Habana, permitiendo así la posibilidad de realizar modificaciones de forma más simple sobre este y por personal no especializado en BIND 9.
 \end{conclusions}

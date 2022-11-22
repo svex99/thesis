@@ -477,10 +477,52 @@ Compose como herramienta para el despliegue de sistemas con múltiples contenedo
 
 Para hacer uso de Compose se declaró un archivo \verb|docker-compose| con los diferentes servicios, volúmenes y la red privada en la que va a estar desplegada el sistema. Dicho archivo es mostrado a continuación para luego discutir sus aspectos principales.
 
-\begin{lstlisting}[frame=single, caption=\textbf{docker-compose.yml} creado para el manejo de los servicios en la arquitectura]
+\begin{lstlisting}[frame=single, escapechar=|, caption=\textbf{compose.yaml} crdockereado para el manejo de los servicios en la arquitectura.]
 version: "3.8"
 
+x-default-api: &default-api
+    depends_on:
+        - bind-server
+    dns:
+        - 172.30.10.1
+    environment:
+        - DOCKER_HOST=http://host.docker.internal:2375
+        - BIND_HOST=bind-server
+    extra_hosts:
+        - "host.docker.internal:host-gateway"|\label{line:extra_hosts}|
+    networks:
+        bind-services:
+            ipv4_address: 172.30.10.2
+
+x-default-api-dev: &default-api-dev
+    # omitted for brevity
+
 services:
+    bind-api-prod:
+        <<: *default-api
+        image: bind-api-prod
+        container_name: bind-api-prod
+        build:
+            dockerfile: docks/api.Dockerfile
+            context: .
+            target: prod
+        ports:
+            - "2020:2020"
+        volumes:
+            - bind-conf:/data/bind/conf
+            - bind-lib:/data/bind/lib
+            - bind-api-data:/data/api
+        profiles:
+            - prod
+
+    bind-api-dev:
+        <<: *default-api-dev
+        # omitted for brevity
+
+    bind-api-bench:
+        <<: *default-api-dev
+        # omitted for brevity
+
     bind-server:
         image: docker.uclv.cu/ubuntu/bind9
         container_name: bind-server
@@ -498,25 +540,15 @@ services:
             bind-services:
             ipv4_address: 172.30.10.1
 
-    bind-api:
-        depends_on:
-            - bind-server
-        image: bind-api
-        container_name: bind-api
-        build:
-            dockerfile: docks/api.Dockerfile
-            context: .
-        ports:
-            - 2020:2020
-        volumes:
-            - bind-conf:/go/src/data/bind/conf
-            - bind-lib:/go/src/data/bind/lib
-            - bind-api-data:/go/src/data/api/
-        dns:
-            - 172.30.10.1
-        networks:
-            bind-services:
-            ipv4_address: 172.30.10.2
+volumes:
+    bind-conf:
+        external: true
+    bind-lib:
+        external: true
+    bind-cache: {}
+    bind-log: {}
+    bind-api-data:
+        external: true
 
 networks:
     bind-services:
@@ -525,47 +557,39 @@ networks:
         ipam:
             driver: default
             config:
-            - subnet: 172.30.10.0/16
-
-volumes:
-    bind-conf:
-        external: true
-    bind-lib:
-        external: true
-    bind-cache:
-    bind-log:
-    bind-api-data:
-        external: true
+                - subnet: 172.30.10.0/16
 \end{lstlisting}
 
 La API comparte con BIND los volúmenes \verb|bind-conf| y \verb|bind-lib|, el primero almacena a configuración del servidor DNS, mientras que el segundo es en el que van a estar almacenadas las zonas que este manejando el servidor de nombres. Estos volúmenes deben ser creados de forma externa con el comando \verb|docker volume create <vol-name>|.
 
 Ubicar a ambos servicios en una misma red privada permite mantenerlos aislados en su comunicación del \textit{host} y garantizar su comunicación de forma más directa. Cada servicio solo expone los puertos que son necesarios, la API un puerto por el que va a recibir pedidos el servidor de Gin, y BIND los puertos necesarios para el funcionamiento del servicio DNS.
 
+Para realizar la ejecución de los comandos de \verb|rndc| a través de la API de Docker se hace necesario añadir en el campo \verb|extra_hosts| (línea \ref{line:extra_hosts}) un mapeo de direcciones IP para poder acceder al motor de Docker de la computadora en que esta siendo ejecutado el servicio de BIND 9 y la misma aplicación (Figura \ref{fig:extra_hosts}). Si el contenedor de BIND 9 está ubicado en  unmotor de Docker remoto, la dirección IP del \textit{host} debe ser especificada en lugar de \verb|host-gateway|.
+
+\begin{figure}[!ht]
+    \centering
+    \includegraphics[width=\linewidth]{draws/extra_hosts.png}
+    \caption{Ejecución de comandos desde la API al servidor de BIND 9 a través del motor de Docker que gestiona a ambos.}
+    \label{fig:extra_hosts}
+\end{figure}
+
 Para el servicio de BIND 9 fue usada la imagen que ofrece Ubuntu en DockerHub ya mencionada en la sección \ref{sec:bind-storage}. La imagen de la API fue creada usando construcción de varias etapas (\textit{multi-stage build}) para minimizar el tamaño de la imagen en producción considerablemente [\cite{multi-stage}].
 
 \begin{lstlisting}[frame=single, escapechar=|, caption=Dockerfile para la API.]
 FROM docker.uclv.cu/golang:1.19.2 as base
 
-ENV GIN_MODE=release
-ENV PORT=2020
 ENV CGO_ENABLED=0
 
-WORKDIR /go/src/
+WORKDIR /go/src
 
-COPY vendor vendor/
 COPY . .
 
 RUN go build -mod=vendor -o build/bind-api
+    
 
-VOLUME [ "/go/src/data/bind/conf", "/go/src/data/bind/lib", "/go/src/data/api" ]
+FROM scratch as prod|\label{line:2nd-stage}|
 
-EXPOSE 2020
-
-CMD ["./build/bind-api"]
-
-
-FROM scratch|\label{line:2nd-stage}|
+ENV GIN_MODE=release
 
 COPY --from=base /go/src/build/bind-api /usr/bin/bind-api
 
@@ -576,14 +600,109 @@ EXPOSE 2020
 CMD ["bind-api"]
 \end{lstlisting}
 
-En una primera etapa (\verb|base|) se usa como base la imagen la imagen de Go, \verb|golang:1.19.2|, a ella se copian las dependencias del proyecto previamente creadas por \verb|go mod vendor|. Finalizando la primera etapa se crea el archivo binario y se especifican los volumen y el puerto que va a exponer la API para las conexiones TCP.
+En una primera etapa (\verb|base|) se usa como base la imagen la imagen de Go, \verb|golang:1.19.2|, a ella se copian las dependencias del proyecto previamente creadas por \verb|go mod vendor|. Una vez hecho esto, es compilado el sistema en un único binario que con todas sus dependencias autocontenidas.
 
-La segunda etapa (línea \ref{line:2nd-stage}) tiene como objetivo crear una imagen con el número mínimo de artefactos y que solo contenga el binario de la aplicación. Esto se logra copiando tan solo el binario compilado del código fuente en la primera etapa, el cual tiene todas las dependencias contenidas. Como en la primera etapa, en esta son especificados los volúmenes y el puerto  a usar. En esta se usa como base la imagen \verb|scratch|\footnote{\url{https://hub.docker.com/_/scratch}}, una imagen especial de Docker la cual no crea una capa extra al ser usada como base, por tanto la imagen resultante tendrá solo 4 capas, en lugar de 5.
+La segunda etapa (línea \ref{line:2nd-stage}) tiene como objetivo crear una imagen con el número mínimo de artefactos. Esto se logra copiando tan solo el binario compilado del código fuente en la primera etapa. A continuación, con vistas a la puesta en producción, son especificados los volúmenes y el puerto a usar. En esta se usa como base la imagen \verb|scratch|\footnote{\url{https://hub.docker.com/_/scratch}}, una imagen especial de Docker la cual no crea una capa extra al ser usada como base y que no contiene archivos.
 
 Con el empleo de esta aproximación se logra disminuir considerablemente el tamaño de la imagen resultante. La primera etapa da como resultado una imagen de 1.15GB de tamaño, mientras que la segunda tan solo 19MB. Se reduce el tamaño final aproximadamente un 98.3\% al eliminar el SDK de Go y otras herramientas que trae la imagen de Go por defecto, pero que no son necesarias en producción, dado que la aplicación es compilada en un solo archivo binario que se comunica directamente con el sistema operativo.
 
 \section{Experimentación}
 
-\subsection{Consumo de memoria ante el aumento de la cantidad de zonas y/o registros}
+Una vez concluida la propuesta y el desarrollo de su implementación, corresponde validar la solución creada. Para ello se modelan diferentes experimentos que verifiquen las funciones del servidor y su capacidad de respuesta. Con tal objetivo se confirma que la propuesta responde al problema para el que fue diseñada, pero además es posible verificar la carga a soportar de la implementación sobre BIND 9 y diferentes métricas que diagnostiquen la capacidad del servidor.
 
-\subsection{Latencia ante el aumento de la cantidad de zonas y/o registros}
+Primero, se trata de probar que añadir una nueva zona a través de la API, en efecto, modifica la configuración del servidor de nombres. Este experimento, además sirve para comprobar la latencia de la API al aumentar la cantidad de zonas que mantiene el servidor de BIND.
+
+Segundo, se desea valorar el consumo de memoria por la API cuando el servidor maneja un número alto de zonas. Esto permite estimar la cantidad de zonas posibles a manejar de acuerdo a los recursos de cómputo.
+
+Para la realización de los experimentos se uso la imagen de Docker usada en desarrollo y almacenada en el repositorio\footnote{\url{https://github.com/svex99/bind-api/blob/main/docks/dev.Dockerfile}}. Esta fue ejecutada en un ambiente con Ubuntu 22.04.1 LTS, procesador AMD Ryzen 5 5600h × 12, 8GB de RAM y 100GB de almacenamiento SSD.
+
+\subsection{Latencia ante el aumento de la cantidad de zonas}
+
+Para desarrollar este experimento el servidor fue poblado con una cantidad específica de zonas de forma previa. Cada fichero de zona creado tuvo un tamaño aproximado de 182B, lo que se traduce en una entrada en la configuración de BIND de aproximadamente 89B, y un total de 271B a procesar por cada zona. Cada una de las zonas solo tiene definidos tres registros, el \verb|SOA|, junto a un \verb|NS| y \verb|A| para indicar el servidor de nombres de la zonas. Esta información trae consigo un aumento de la carga en el servidor de BIND así como en la API, principalmente a la hora de ejecutar \verb|rndc reconfig| contra el servidor de nombres.
+
+\begin{table}[!ht]
+    \centering
+    \begin{tabular}{|c|c|c|}
+    \hline
+    \multicolumn{1}{|p{4cm}|}{\centering\textbf{Zonas previas}} & \multicolumn{1}{|p{4cm}|}{\centering \textbf{Añadir 100 nuevas zonas (s)}} & \multicolumn{1}{|p{4cm}|}{\centering \textbf{Tiempo estimado por solicitud (ms)}} \\ \hline
+        0 & 6.99 & 69.89 \\ \hline
+        250 & 11.04 & 110.37 \\ \hline
+        500 & 12.38 & 123.80 \\ \hline
+        1000 & 14.15 & 141.51 \\ \hline
+        2000 & 18.10 & 180.96 \\ \hline
+        4000 & 24.66 & 246.55 \\ \hline
+    \end{tabular}
+    \caption{Tiempo de procesamiento de añadir 100 nuevas zonas de acuerdo al número de zonas previas.}
+\end{table}
+
+El tiempo tomado necesario para la solicitud de un pedido es aceptable, teniendo en cuenta la necesidad de comunicarse con el servidor de nombres. Este es el principal factor que aumenta el tiempo de respuesta, pues BIND 9 tiene que cargar cada una de las zonas en su configuración. El tiempo de respuesta aumenta a medida que tomas más tiempo para el servidor procesar la solicitud de \verb|rdnc reconfig|. Además, la escritura en disco de la configuración cuando es añadida una nueva zona también aumenta, pues en sucesivas escrituras esta es reescrita.
+
+En cuanto a la latencia de retribuir la lista completa de zonas, es baja, la principal ventaja es que no requiere lectura desde disco. La API mantiene una copia en memoria de la configuración del servidor de BIND con la cual responder a estos pedidos.
+
+\begin{table}[!ht]
+    \centering
+    \begin{tabular}{|c|c|c|}
+    \hline
+    \multicolumn{1}{|p{4cm}|}{\centering\textbf{Zonas previas}} & \multicolumn{1}{|p{7cm}|}{\centering \textbf{Obtener la lista de zonas (ms)}} \\ \hline
+        250  & 0.008740  \\ \hline
+        500  & 0.019530  \\ \hline
+        1000 & 0.056963  \\ \hline
+        2000 & 0.174529  \\ \hline
+        4000 & 0.182631  \\ \hline
+    \end{tabular}
+    \caption{Tiempo de procesamiento de añadir 100 nuevas zonas de acuerdo al número de zonas previas.}
+\end{table}
+
+\subsection{Consumo de memoria ante el aumento de la cantidad de zonas}
+
+Para medir el uso de memoria al cargar la información en memoria (invocar \verb|load|), se hizo uso de la biblioteca \verb|runtime/pprof| que viene por defecto en la instalación de Go. La herramienta del mismo nombre es usada para mostrar y analizar la información recogida en tiempo de ejecución. En este experimento se crearon zonas de forma semejante al anterior para desarrollar los pruebas.
+
+\begin{figure}
+    \centering
+    \begin{subfigure}{0.49\textwidth}
+        \includegraphics[width=\textwidth]{Graphics/mem250z.png}
+        \caption{250 zonas}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.49\textwidth}
+        \includegraphics[width=\textwidth]{Graphics/mem500z.png}
+        \caption{500 zonas}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.49\textwidth}
+        \includegraphics[width=\textwidth]{Graphics/mem1000z.png}
+        \caption{1000 zonas}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.49\textwidth}
+        \includegraphics[width=\textwidth]{Graphics/mem2000z.png}
+        \caption{2000 zonas}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.49\textwidth}
+        \includegraphics[width=\textwidth]{Graphics/mem4000z.png}
+        \caption{4000 zonas}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.49\textwidth}
+        \includegraphics[width=\textwidth]{Graphics/mem8000z.png}
+        \caption{8000 zonas}
+    \end{subfigure}
+            
+    \caption{Consumo de memoria de la implementación de \textbf{load} de acuerdo a la cantidad de zonas.}
+    \label{fig:bench-mem}
+\end{figure}
+
+Se puede apreciar en la Figura \ref{fig:bench-mem} que la cantidad de zonas que maneje el servidor de nombres incurre directamente en el consumo de memoria de la API. LLegando a consumir casi 1GB de RAM cuando maneja 8000 zonas.
+
+El consumo de memoria también es directamente proporcional a la información almacenada en cada zona. Sin embargo, la cantidad de zonas en un servidor DNS es recomendado por algunos proveedores mantenerla por debajo de 10000 [\cite{dns-cap}]. Por lo que ante un consumo de memoria elevado, la solución potencial puede ser escalar de forma horizontal con otro servicio, aunque también es necesario tener en cuenta la carga sobre el servidor.
+
+\subsection{Discusión}
+
+Los experimentos dan como resultado que la implementación de la propuesta es válida para su puesta en producción. Y por tanto un aproximación semejante en base a la propuesta puede aplicarse a otros servidores DNS autoritarios de código abierto. A pesar de esto, se considera que cada solución debe adaptarse a las cualidades del software al que aplica, como fue este caso con BIND 9.
+
+En el entorno de la Universidad de La Habana, y organizaciones en general, las modificaciones ejecutadas sobre un servicio DNS a diario no llegan a ser altas para la capacidad de respuesta de la solución. Dado este caso, es válido aceptar como buenos los valores de latencia al hacer modificaciones sobre BIND y por tanto no es necesario considerar una optimización prematura sobre la misma.
+
+El consumo de memoria es el principal aspecto a considerar a la hora de la puesta en producción pero solo es acorde a la configuración que maneja el servidor de BIND. Positivamente ofrece como ventaja obtener un tiempo de respuesta más rápido por parte de la API ante los pedidos.
+
+La posibilidad de haber preparado la API para su despliegue con Docker permite limitar los recursos que esta usa a nivel de sistema. Por tanto, en el caso que compartan la API y BIND 9 recursos en una misma computadora y no sea posible estimarse el uso de memoria por la API, es posible desplegar el primero, limitando su uso de memoria, sin interferir con el funcionamiento del servicio DNS.
