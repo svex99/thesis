@@ -86,7 +86,7 @@ Para indicar cambios en los archivos de BIND con \verb|rndc| están disponibles 
 En las opciones de conexión de \verb|rndc| puede ser especificada la dirección IP del servidor de BIND al que conectarse. Siendo así, es posible instalar \verb|rdnc| en el ambiente de la API y especificar la dirección del contenedor que ejecuta a BIND. Pero dado que la instalación de BIND viene con \verb|rndc| por defecto, es más factible invocar este de forma programática a través de Docker. Para ello se implementó un método que ejecutase un comando en el contenedor remoto, tomando como referencia la implementación del comando \verb|docker exec|\footnote{\url{https://github.com/docker/cli/blob/1163b4609978e0e6f2b2629b59c4a62d348e1466/cli/command/container/exec.go\#L99}} y en base a él los métodos \verb|Reconfig| y \verb|ReloadZone|.
 
 \begin{lstlisting}[frame=single, language=Go, caption=Métodos para actualizar a BIND con los cambios en sus archivos.]
-func (bs *BindService) exec(command []string) error {
+    func (bs *BindService) exec(command ...string) error {
     if _, err := bs.DockerCli.ContainerInspect(bs.ctx, bs.ContainerId); err != nil {
         return err
     }
@@ -96,9 +96,9 @@ func (bs *BindService) exec(command []string) error {
         Privileged:   false,
         Tty:          false,
         AttachStdin:  false,
-        AttachStderr: false,
+		AttachStderr: true,
         AttachStdout: false,
-        Detach:       true,
+		Detach:       false,
         DetachKeys:   "",
         Env:          []string{},
         WorkingDir:   "/",
@@ -128,12 +128,12 @@ func (bs *BindService) exec(command []string) error {
 // Runs `rndc reconfig` in the BIND server.
 // Reloads the configuration file and loads new zones, but does not reload existing zone files even if they have changed.
 func (bs *BindService) Reconfig() error {
-    return bs.exec([]string{"rndc", "reconfig"})
+	return bs.exec("rndc", "reconfig")
 }
 
 // Runs `rndc reload {zone}` in the BIND server
 func (bs *BindService) ReloadZone(zone string) error {
-    return bs.exec([]string{"rndc", "reload", zone})
+	return bs.exec("rndc", "reload", zone)
 }
 \end{lstlisting}
 
@@ -178,7 +178,7 @@ var (
     )
 )
 
-type DomainConf struct {
+type ZoneConf struct {
 	Origin    string     `parser:"'$ORIGIN' @Origin '.' NewLine" json:"origin"`
 	Ttl       string     `parser:"'$TTL' @Ttl NewLine" json:"ttl"`
 	SOARecord *SOARecord `parser:"@@ NewLine" json:"soaRecord"`
@@ -237,29 +237,26 @@ Una ventaja notable de poder representar la gramática en las etiquetas de las e
 La implementación de la función \verb|load| se puede dividir en dos partes. La primera, \textit{parsear} la configuración (\verb|/etc/bind/named.conf.local|) de BIND para detectar todas las zonas disponibles y una segunda, en la que para cada zona encontrada se \textit{parsea} el archivo (campo \verb|file|) al que esta refiere.
 
 \begin{lstlisting}[frame=single, language=Go, caption=Implementación de la función \textbf{load} para BIND.]
-func (bs *BindService) load() {
+func (bs *BindService) Load() {
 	var err error
 
 	bs.BindConf, err = bs.parseBindConf(Service.ZonesFilePath)
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf(">>> Loaded %d zone(s) from %s\n", len(Service.BindConf.Zones), Service.ZonesFilePath)
 
 	bs.Domains = make(map[string]*parser.DomainConf)
 
-	fmt.Println(">>> Loading BIND9 domain files")
 	for _, zone := range Service.BindConf.Zones {
 		filename := zone.File[strings.LastIndex(zone.File, "/")+1:]
 
-		dConf, err := Service.parseDomainConf(setting.Bind.LibPath + filename)
+		zConf, err := Service.parseDomainConf(setting.Bind.LibPath + filename)
 		if err != nil {
 			log.Printf("Error loading %s: %s\n", filename, err)
 			continue
 		}
 
-		Service.Domains[dConf.Origin] = dConf
-		fmt.Println("Loaded domain file", filename)
+		Service.Domains[zConf.Origin] = zConf
 	}
 }
 \end{lstlisting}
@@ -317,13 +314,13 @@ De esta forma, en la implementación, es realizada la actualización de la versi
 \begin{lstlisting}[frame=single, language=Go]
 // Generates a new serial for the SOA record.
 // Generated serials follows the format YYYYMMDDNN where NN is a two digits identifier.
-func (dc *DomainConf) UpdateSerial() {
+func (zc *ZoneConf) UpdateSerial() {
     now := time.Now().UTC()
     newSerial := uint(now.Year()*1_000_000 + int(now.Month())*10_000 + now.Day()*100)
-    if dc.SOARecord.Serial >= newSerial {
-        dc.SOARecord.Serial = dc.SOARecord.Serial + 1
+    if zc.SOARecord.Serial >= newSerial {
+        zc.SOARecord.Serial = zc.SOARecord.Serial + 1
     } else {
-        dc.SOARecord.Serial = newSerial
+        zc.SOARecord.Serial = newSerial
     }
 }
 \end{lstlisting}
@@ -332,18 +329,18 @@ Según los aspectos definidos en esta sección se muestran a continuación la fu
 
 \label{func:create-zone}
 \begin{lstlisting}[frame=single, language=Go, escapechar=|, caption=Ejemplo de la función que añade una nueva zona al servidor DNS.]
-func (bm *BindService) CreateZone(data *schemas.DomainData) (*parser.DomainConf, error) {
+func (bs *BindService) CreateZone(data *schemas.DomainData) (*parser.ZoneConf, error) {
     // Get write access to the filesystem and release it when done
-    bm.Mutex.Lock()
-    defer bm.Mutex.Unlock()
+    bs.Mutex.Lock()
+    defer bs.Mutex.Unlock()
 
     // Validate that the new zone is not defined already 
-    if _, ok := bm.Domains[data.Origin]; ok {
-        return nil, fmt.Errorf("domain %s exists already", data.Origin)
+    if _, ok := bs.Zones[data.Origin]; ok {
+        return nil, fmt.Errorf("zone %s exists already", data.Origin)
     }
 
     // Create the new zone from received data
-    dConf := &parser.DomainConf{
+    zConf := &parser.ZoneConf{
         Origin: data.Origin,
         Ttl:    data.Ttl,
         SOARecord: &parser.SOARecord{
@@ -354,44 +351,41 @@ func (bm *BindService) CreateZone(data *schemas.DomainData) (*parser.DomainConf,
             Expire:     data.Expire,
             Minimum:    data.Minimum,
         },
-        Records: []parser.Record{
-            parser.NSRecord{NameServer: data.NameServer, Type: "NS"},
-            parser.ARecord{Name: data.NameServer, Ip: data.NSIp, Type: "A"},
-        },
+        Records: []parser.Record{},
     }
 
-	bindConf := *bm.BindConf
+	bindConf := *bs.BindConf
 
-	if err := bindConf.AddZone(dConf); err != nil {
+	if err := bindConf.AddZone(zConf); err != nil {
 		return nil, err
 	}
 
     // Write new changes to BIND files and rollback on error
-	rollbackDConf, err := dConf.WriteToDisk(dConf.GetFilename())
+	rollbackZConf, err := zConf.WriteToDisk(zConf.GetFilename())
 	if err != nil {
-		rollbackDConf()
+		rollbackZConf()
 		return nil, err
 	}
 
-	rollbackBindConf, err := bindConf.WriteToDisk(bm.ZonesFilePath)
+	rollbackBindConf, err := bindConf.WriteToDisk(bs.ZonesFilePath)
 	if err != nil {
-		rollbackDConf()
+		rollbackZConf()
 		rollbackBindConf()
 		return nil, err
 	}
 
     // Notify BIND about the new update|\label{line:call-reconf}|
-	if err := bm.Reconfig(); err != nil {
-		rollbackDConf()|\label{line:reconf-roll1}|
+	if err := bs.Reconfig(); err != nil {
+		rollbackZConf()|\label{line:reconf-roll1}|
 		rollbackBindConf()|\label{line:reconf-roll2}|
 		return nil, err
 	}
 
     // Sync changes on memory|\label{line:sync-mem}|
-	bm.BindConf = &bindConf
-	bm.Domains[dConf.Origin] = dConf
+	bs.BindConf = &bindConf
+	bs.Zones[zConf.Origin] = zConf
 
-	return dConf, nil
+	return zConf, nil
 }
 \end{lstlisting}
 
@@ -412,21 +406,21 @@ import (
 
 // Writes the zone configuration to a plain text file.
 // Returns a function that rollbacks the process.
-func (dc *DomainConf) WriteToDisk(filename string) (func(), error) {
-    dc.UpdateSerial()
+func (zc *ZoneConf) WriteToDisk(filename string) (func(), error) {
+	zc.UpdateSerial()
 
-    content := []string{
-        fmt.Sprintf("$ORIGIN %s.", dc.Origin),
-        fmt.Sprintf("$TTL %s", dc.Ttl),
-        fmt.Sprintf(
-            "@ IN SOA %s %s ( %d %d %d %d %d )",
-            dc.SOARecord.NameServer, dc.SOARecord.Admin,
-            dc.SOARecord.Serial, dc.SOARecord.Refresh, dc.SOARecord.Retry, dc.SOARecord.Expire, dc.SOARecord.Minimum,
-        ),
-    }
-    for _, record := range dc.Records {
-        content = append(content, record.String())
-    }
+	content := []string{
+		fmt.Sprintf("$ORIGIN %s.", zc.Origin),
+		fmt.Sprintf("$TTL %s", zc.Ttl),
+		fmt.Sprintf(
+			"@ IN SOA %s %s ( %d %d %d %d %d )\n",
+			zc.SOARecord.NameServer, zc.SOARecord.Admin,
+			zc.SOARecord.Serial, zc.SOARecord.Refresh, zc.SOARecord.Retry, zc.SOARecord.Expire, zc.SOARecord.Minimum,
+		),
+	}
+	for _, record := range zc.Records {
+		content = append(content, record.String())
+	}
 
     // Create a backup of config if file exists
     rollback := file.MakeBackup(filename)
@@ -477,7 +471,7 @@ Compose como herramienta para el despliegue de sistemas con múltiples contenedo
 
 Para hacer uso de Compose se declaró un archivo \verb|docker-compose| con los diferentes servicios, volúmenes y la red privada en la que va a estar desplegada el sistema. Dicho archivo es mostrado a continuación para luego discutir sus aspectos principales.
 
-\begin{lstlisting}[frame=single, escapechar=|, caption=\textbf{compose.yaml} crdockereado para el manejo de los servicios en la arquitectura.]
+\begin{lstlisting}[frame=single, escapechar=|, caption=\textbf{compose.yaml} creado para el manejo de los servicios en la arquitectura.]
 version: "3.8"
 
 x-default-api: &default-api
@@ -564,7 +558,7 @@ La API comparte con BIND los volúmenes \verb|bind-conf| y \verb|bind-lib|, el p
 
 Ubicar a ambos servicios en una misma red privada permite mantenerlos aislados en su comunicación del \textit{host} y garantizar su comunicación de forma más directa. Cada servicio solo expone los puertos que son necesarios, la API un puerto por el que va a recibir pedidos el servidor de Gin, y BIND los puertos necesarios para el funcionamiento del servicio DNS.
 
-Para realizar la ejecución de los comandos de \verb|rndc| a través de la API de Docker se hace necesario añadir en el campo \verb|extra_hosts| (línea \ref{line:extra_hosts}) un mapeo de direcciones IP para poder acceder al motor de Docker de la computadora en que esta siendo ejecutado el servicio de BIND 9 y la misma aplicación (Figura \ref{fig:extra_hosts}). Si el contenedor de BIND 9 está ubicado en  unmotor de Docker remoto, la dirección IP del \textit{host} debe ser especificada en lugar de \verb|host-gateway|.
+Para realizar la ejecución de los comandos de \verb|rndc| a través de la API de Docker se hace necesario añadir en el campo \verb|extra_hosts| (línea \ref{line:extra_hosts}) un mapeo de direcciones IP para poder acceder al motor de Docker de la computadora en que esta siendo ejecutado el servicio de BIND 9 y la misma aplicación (Figura \ref{fig:extra_hosts}). Si el contenedor de BIND 9 está ubicado en  un motor de Docker remoto, la dirección IP del \textit{host} debe ser especificada en lugar de \verb|host-gateway|.
 
 \begin{figure}[!ht]
     \centering
@@ -655,7 +649,7 @@ En cuanto a la latencia de retribuir la lista completa de zonas, es baja, la pri
 
 \subsection{Consumo de memoria ante el aumento de la cantidad de zonas}
 
-Para medir el uso de memoria al cargar la información en memoria (invocar \verb|load|), se hizo uso de la biblioteca \verb|runtime/pprof| que viene por defecto en la instalación de Go. La herramienta del mismo nombre es usada para mostrar y analizar la información recogida en tiempo de ejecución. En este experimento se crearon zonas de forma semejante al anterior para desarrollar los pruebas.
+Para medir el uso de memoria al cargar la información en memoria (invocar \verb|load|), se hizo uso de la biblioteca \verb|runtime/pprof|\footnote{\url{https://pkg.go.dev/runtime/pprof}} que viene por defecto en la instalación de Go. La herramienta del mismo nombre es usada para mostrar y analizar la información recogida en tiempo de ejecución. En este experimento se crearon zonas de forma semejante al anterior para desarrollar los pruebas.
 
 \begin{figure}
     \centering
@@ -688,7 +682,7 @@ Para medir el uso de memoria al cargar la información en memoria (invocar \verb
         \includegraphics[width=\textwidth]{Graphics/mem8000z.png}
         \caption{8000 zonas}
     \end{subfigure}
-            
+
     \caption{Consumo de memoria de la implementación de \textbf{load} de acuerdo a la cantidad de zonas.}
     \label{fig:bench-mem}
 \end{figure}
@@ -696,6 +690,60 @@ Para medir el uso de memoria al cargar la información en memoria (invocar \verb
 Se puede apreciar en la Figura \ref{fig:bench-mem} que la cantidad de zonas que maneje el servidor de nombres incurre directamente en el consumo de memoria de la API. LLegando a consumir casi 1GB de RAM cuando maneja 8000 zonas.
 
 El consumo de memoria también es directamente proporcional a la información almacenada en cada zona. Sin embargo, la cantidad de zonas en un servidor DNS es recomendado por algunos proveedores mantenerla por debajo de 10000 [\cite{dns-cap}]. Por lo que ante un consumo de memoria elevado, la solución potencial puede ser escalar de forma horizontal con otro servicio, aunque también es necesario tener en cuenta la carga sobre el servidor.
+
+\subsection{Pruebas End-to-End}
+
+Estas pruebas está diseñadas con el objetivo de verificar que el servidor de BIND 9 manejado desde la API sirve la información de forma correcta. La configuración para desarrollar dicha prueba esta compuesta por BIND 9 y la API ubicados en una red privada de Docker, con el primero sirviendo consultas DNS externas a través de un puerto expuesto para conexiones TCP y UDP. El contenedor de la API usa como servidor DNS a BIND 9 con el objetivo de realizar las consultas de prueba contra él.
+
+En este ambiente se implementa un grupo de pruebas que de forma programática invocan los puntos finales de la API y consultan al servidor DNS para comprobar el correcto funcionamiento. Al ejecutar el conjunto de pruebas en el ambiente interno de docker las consultas DNS son resueltas de forma correcta con el servidor DNS. 
+
+\begin{lstlisting}[frame=single, numbers=none, caption=Resultados del conjunto de pruebas end-to-end.]
+--- PASS: TestAPIFlow (8.73s)
+    --- PASS: TestAPIFlow/TestAddZone (1.43s)
+    --- PASS: TestAPIFlow/TestMXRecord (0.42s)
+        --- PASS: TestAPIFlow/TestMXRecord/TestAddMX (0.34s)
+        --- PASS: TestAPIFlow/TestMXRecord/TestDelMX (0.08s)
+    --- PASS: TestAPIFlow/TestCNAMERecord (0.33s)
+        --- PASS: TestAPIFlow/TestCNAMERecord/TestAddCNAME (0.26s)
+        --- PASS: TestAPIFlow/TestCNAMERecord/TestDelCNAME (0.08s)
+    --- PASS: TestAPIFlow/TestTXTRecord (0.43s)
+        --- PASS: TestAPIFlow/TestTXTRecord/TestAddTXT (0.13s)
+        --- PASS: TestAPIFlow/TestTXTRecord/TestDelTXT (0.30s)
+    --- PASS: TestAPIFlow/TestDelZone (6.09s)
+PASS
+ok      github.com/svex99/bind-api      8.745s
+\end{lstlisting}
+
+Desde la computadora que se realizan las pruebas y externo al ambiente de Docker también es verificada esta información usando la herramienta \verb|dig|\footnote{\url{https://man.openbsd.org/dig.1}} para realizar consultas al servidor de nombres. A continuación se toma como referencia un archivo de zona y las consultas realizadas al servidor relacionadas con él.
+
+\begin{lstlisting}[frame=single, numbers=none, caption=Archivo de registros para la zona \textbf{flow-test-1.com} servida por el servidor de BIND 9.]
+$ORIGIN flow-test-1.com.
+$TTL 2d
+@ IN SOA ns1 svex ( 2022112514 86400 7200 3600000 172800 )
+@ IN NS ns1
+ns1 IN A 10.1.3.1
+@ IN MX 101 email-server1
+@ IN MX 103 email-server3
+cname-dest IN A 7.7.7.7
+@ IN TXT "key1=value-body"
+\end{lstlisting}
+
+\begin{lstlisting}[frame=single, numbers=none, caption=Consulta externas realizadas al servidor para la zona \textbf{flow-test-1.com}.]
+$ dig +short @localhost -p 30053 flow-test-1.com soa
+ns1.flow-test-1.com. svex.flow-test-1.com. 2022112514 86400 7200 3600000 172800
+
+$ dig +short @localhost -p 30053 ns1.flow-test-1.com
+10.1.3.1
+
+$ dig +short @localhost -p 30053 flow-test-1.com mx 
+101 email-server1.flow-test-1.com.
+103 email-server3.flow-test-1.com.
+
+$ dig +short @localhost -p 30053 flow-test-1.com txt 
+"key1=value-body"
+\end{lstlisting}
+
+La capacidad del servidor DNS para responder a cada una de las consultas realizadas, tanto programáticas como manuales valida el funcionamiento del flujo diseñado. Siendo así efectiva la solución para administrar el servidor de nombres de BIND 9.
 
 \subsection{Discusión}
 
