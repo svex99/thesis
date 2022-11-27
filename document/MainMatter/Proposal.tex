@@ -4,7 +4,7 @@ A partir del estudio hecho en el capítulo anterior podemos asumir que sería be
 
 Dicha solución sería de especial utilidad en la Universidad de La Habana, institución que por diferentes motivos no hace uso de los SaaS para su solución DNS. En el centro es empleado BIND 9 como servidor de nombres y mantenido por profesionales de la computación en el Nodo UH. Modificaciones básicas, como es añadir un nuevo dominio, serían mucho mas simple a través de una interfaz de usuario. Por lo que una API HTTP compatible con los servidores DNS de código abierto es un paso de avance en el desarrollo de tal objetivo.
 
-De forma subyacente los diferentes servidores DNS están sujetos a la implementación de DNS propuesta en los RFC. Por tanto, cada uno de los servidores de nombres debe tener el mismo punto de vista respecto al sistema. Poseer de un sistema de almacenamiento para persistir los diferentes conjuntos de RR en cada zona e implementar las características de DNS actual, tanto las requeridas como las opcionales. Estos puntos en común que deben compartir las diferentes implementaciones de servidores DNS sientan las bases para asumir los aspectos en los que sustentar la propuesta teórica de una API HTTP sobre ellos.
+De forma subyacente los diferentes servidores de nombres están sujetos a la implementación de DNS propuesta en los RFC. Por tanto, cada uno de los servidores de nombres debe tener el mismo punto de vista respecto al sistema, poseer un sistema de almacenamiento para persistir los diferentes conjuntos de RR en cada zona e implementar las características de DNS actual, tanto las requeridas como las opcionales. Estos puntos en común que deben compartir las diferentes implementaciones de servidores DNS sientan las bases para asumir los aspectos en los que sustentar la propuesta teórica de una API HTTP sobre ellos.
 
 Como propuesta de solución a la implementación de una API para los diferentes softwares de servidores DNS autoritarios de código abierto, se propone un arquitectura en la que la API tiene acceso al sistema de almacenamiento de la configuración DNS para su modificación. Además existe un medio de comunicación entendible por la API y el servidor DNS para desarrollar cualquier intercambio de información necesario.
 
@@ -34,7 +34,7 @@ Asumiendo que existe un servidor DNS autoritario $A$, con un sistema de persiste
     \caption{Diagrama de flujo para la función \textbf{load}.}
 \end{figure}
 
-Este procedimiento tiene como objetivo exponer cada una de las zonas con su conjunto de registros a la API. El mecanismo de lectura debe funcionar de acuerdo a como esta estructurada la información en el servidor DNS, archivos de texto plano, binarios o una base de datos externa. La estructura de datos resultante es manejada por la API y debe reflejar en todo momento el estado actual del servidor DNS.
+Este procedimiento tiene como objetivo cargar cada una de las zonas con su conjunto de registros a la API. El mecanismo de lectura debe funcionar de acuerdo a como esta estructurada la información en el servidor DNS: archivos de texto plano, binarios o una base de datos externa. La estructura de datos resultante es manejada por la API y debe reflejar en todo momento el estado actual del servidor DNS.
 
 \section{Escritura de la Configuración DNS}
 
@@ -59,6 +59,6 @@ Cuando se evalúa $f$ son realizadas las validaciones para garantizar que los ca
 
 En caso de errores ambos sistemas deben quedar en el estado anterior a la ejecución de los cambios y la API debe retornar una respuesta indicando el error al completar el pedido. Para ello debe ser implementado un mecanismo que ejecute un \textit{rollback} de forma apropiada.
 
-La interfaz de comunicación es explícitamente necesaria para notificar al servidor DNS de cambios. Por lo que cualquier tipo de protocolo factible para este fin es aceptable. En caso que el servidor de nombres sea capaz de detectar cambios en su configuración de forma autónoma en tiempo de ejecución, la invocación a $h$ puede ser omitida en la implementación.
+La interfaz de comunicación es explícitamente necesaria para notificar al servidor DNS de cambios, por lo que cualquier tipo de protocolo factible para este fin es aceptable. En caso que el servidor de nombres sea capaz de detectar cambios en su configuración de forma autónoma en tiempo de ejecución, la invocación a $h$ puede ser omitida en la implementación.
 
-De esta forma quedan definidas las bases que forman parte de la arquitectura a implementar. Una API HTTP que gestiona directamente los archivos de configuración del servidor de nombres a través de dos funciones, \verb|load| y \verb|save|. Un mecanismo de comunicación entre el servicio de la API HTTP y el servidor DNS para notificar de actualizaciones si es necesario. Adicionalmente, la necesidad de un mecanismo para manejar errores y recuperarse de ellos.
+De esta forma, quedan definidas las bases que forman parte de la arquitectura a implementar: una API HTTP que gestiona directamente los archivos de configuración del servidor de nombres a través de dos funciones, \verb|load| y \verb|save|; y un mecanismo de comunicación entre el servicio de la API HTTP y el servidor DNS para notificar de actualizaciones si es necesario. Adicionalmente, la necesidad de un mecanismo para manejar errores y recuperarse de ellos.

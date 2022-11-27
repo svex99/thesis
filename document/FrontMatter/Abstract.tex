@@ -1,5 +1,11 @@
 \begin{resumen}
-	Resumen en español
+El sistema DNS ha sido de vital importancia para el desarrollo del internet a nivel global. Las diferentes organizaciones hacen uso de este para gestionar su presencia en línea y los servicios que ofrecen. En este ambiente, existen diferentes soluciones de código abierto que funcionan como servidores autoritarios pero que no disponen de una API HTTP para el manejo de la configuración.
+
+Por esto, en este trabajo se propone una arquitectura aplicable a los diferentes servidores de nombres de código abierto para implementar una API HTTP sobre ellos. Esta propuesta se implementa sobre BIND 9, servidor de nombres empleado en la Universidad de La Habana. La implementación se extiende con una interfaz web y un ambiente de microservicios sobre Docker para la puesta en producción.
+
+Sobre BIND 9 se implementa una API REST que mantiene en memoria la configuración DNS. La escritura y carga de la configuración DNS se basa en la propuesta genérica y hace uso de \textit{parsers} con la sintaxis de BIND 9 para la lectura y escritura estructurada a disco. Para aplicar los cambios en tiempo de ejecución sobre BIND 9 se usa la herramienta \verb|rdnc| recomendada por el software.
+
+Teniendo en cuenta la especificidad del sistema DNS por la cual se rigen los diferentes productos de software, y las características comunes que estos tienen con BIND 9, se comprueba la efectividad de la propuesta inicial. Además, se valida que la solución implementada es aplicable en la Universidad de La Habana, para facilitar la configuración del servidor de nombres.
 \end{resumen}
 
 \begin{abstract}
