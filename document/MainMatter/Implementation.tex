@@ -2,11 +2,11 @@
 
 Con el objetivo de llevar a cabo la experimentación en la implementación de una API para los servidores DNS de código abierto, se tomó como software representativo BIND 9. En este capítulo se explican sus características principales que interactúan en la propuesta y la implementación de las funciones \verb|load| y \verb|save| sobre él.
 
-En el presente capítulo se discutirán primeramente las características del sistema de almacenamiento que usa BIND para almacenar la configuración y las zonas del servidor DNS. Luego, en la sección 4.2, el mecanismo mediante el cual se notifica a BIND que ha sido modificado sus sistema de configuración, para que así pueda reflejar los cambios.
+En el presente capítulo se discutirán primeramente las características del sistema de almacenamiento que usa BIND para almacenar la configuración y las zonas del servidor DNS. Luego, en la sección 4.2, el mecanismo mediante el cual se notifica a BIND que ha sido modificado sus sistema de configuración, para que así pueda reflejar los cambios en tiempo de ejecución.
 
 En las secciones posteriores, de la 4.3 a la 4.5, se describe como fueron desarrolladas la funciones de la propuesta y qué alternativas fue necesario tomar en su implementación. También se muestran las principales consideraciones para manejar errores ante los pedidos y cómo garantizar la sincronización entre los datos que maneja la API y el servidor de nombres.
 
-En la sección 4.6, se discute el despliegue de los servicios con Docker y Compose, así como las imágenes usadas en el proceso. Finalmente, se plantean los experimentos realizados y se discuten sus resultados.
+En la sección 4.6, se discute el despliegue de los servicios con Docker y Compose. Finalmente, se plantean los experimentos realizados para verificar el correcto funcionamiento de la implementación y se discuten sus resultados.
 
 \section{Sistema de Almacenamiento}\label{sec:bind-storage}
 BIND usa como sistema de almacenamiento para el servidor DNS archivos de texto plano. En estos archivos se almacena tanto la configuración del servidor autoritario o secundario, como los archivos de zona con sus registros. En la imagen de Docker de BIND basada en Ubuntu\footnote{\url{https://hub.docker.com/r/ubuntu/bind9}} se pueden encontrar los archivos de configuración y de zona en los directorios \verb+/etc/bind+ y \verb+/var/lib/bind+ respectivamente.
@@ -79,7 +79,7 @@ Para indicar cambios en los archivos de BIND con \verb|rndc| están disponibles 
         Modificar zona & \verb|reload <zone-name>| \\ \hline
         Eliminar zona & \verb|reconfig| \\ \hline
     \end{tabular}
-    \caption{Comando \textbf{rdnc} apropiado para cada evento.}
+    \caption{Subcomando de \textbf{rdnc} apropiado para cada evento.}
     \label{table:rndc-event}
 \end{table}
 
@@ -286,7 +286,7 @@ Como consecuencia de esto, en la implementación se decide dividir \verb|save| e
 \begin{figure}[!ht]
     \centering
     \includegraphics[width=\linewidth]{draws/split-save.png}
-    \caption{Funciones que siguen el diseño de \textbf{save} para dividir la lógica.}
+    \caption{Funciones que siguen el diseño de \textbf{save} para dividir la lógica. Cada una afecta diferentes archivos en la configuración de BIND 9 y usa un subcomando específico de \textbf{rndc} para actualizar en tiempo de ejecución el servidor de nombres.}
     \label{fig:split-save}
 \end{figure}
 
@@ -566,7 +566,7 @@ Para realizar la ejecución de los comandos de \verb|rndc| a través de la API d
 \begin{figure}[!ht]
     \centering
     \includegraphics[width=\linewidth]{draws/extra_hosts.png}
-    \caption{Ejecución de comandos desde la API al servidor de BIND 9 a través del motor de Docker que gestiona a ambos.}
+    \caption{Ejecución de comandos desde el contenedor de la API al de BIND 9. En el paso 1, la API debe acceder al motor de Docker que maneja a BIND 9. Una vez recibido el pedido, el motor ejecuta el comando, paso 2, directamente en el contenedor de BIND 9.}
     \label{fig:extra_hosts}
 \end{figure}
 
@@ -601,7 +601,7 @@ En una primera etapa (\verb|base|) se usa como capa la imagen la imagen de Go, \
 
 La segunda etapa (línea \ref{line:2nd-stage}) tiene como objetivo crear una imagen con el número mínimo de artefactos. Esto se logra copiando tan solo el binario compilado del código fuente en la primera etapa. A continuación, con vistas a la puesta en producción, son especificados los volúmenes y el puerto a usar. En esta se usa como base la imagen \verb|scratch|\footnote{\url{https://hub.docker.com/_/scratch}}, una imagen especial de Docker, la cual no crea una capa extra al ser usada como punto de partida y que no contiene archivos.
 
-Con el empleo de esta aproximación se logra disminuir considerablemente el tamaño de la imagen resultante. La primera etapa da como resultado una imagen de 1.15GB de tamaño, mientras que la segunda tan solo 19MB. Se reduce el tamaño final aproximadamente un 98.3\% al eliminar el SDK de Go y otras herramientas que trae la imagen por defecto. Estas no son necesarias en producción, dado que la aplicación es compilada en un solo archivo binario que se comunica directamente con el sistema operativo.
+Con el empleo de esta aproximación se logra disminuir considerablemente el tamaño de la imagen resultante. La primera etapa da como resultado una imagen de 1.15GB de tamaño, mientras que la segunda tan solo 19MB. Se reduce el tamaño final aproximadamente un 98.3\% al eliminar el SDK de Go y otras herramientas que trae la imagen por defecto. Estas no son necesarias en producción, dado que la aplicación es compilada en un solo archivo binario que se comunica directamente con el kernel de Linux.
 
 \section{Experimentación}
 
@@ -791,6 +791,6 @@ En el entorno de la Universidad de La Habana, y organizaciones en general, las m
 
 El consumo de memoria es el principal aspecto a considerar a la hora de la puesta en producción, pero solo es acorde a la configuración que maneja el servidor de BIND. Positivamente, ofrece como ventaja obtener un tiempo de respuesta más rápido por parte de la API ante los pedidos.
 
-La posibilidad de haber preparado la API para su despliegue con Docker permite limitar los recursos que esta usa a nivel de sistema. Por tanto, en el caso que la API y BIND 9 compartan recursos en una misma computadora y no sea posible estimarse el uso de memoria por la API, es posible desplegar el primero, limitando su uso de memoria, sin interferir con el funcionamiento del servicio DNS.
+La posibilidad de haber preparado la API para su despliegue con Docker permite limitar los recursos que esta usa a nivel de sistema. En el caso que la API y BIND 9 compartan recursos en una misma computadora y no sea posible estimarse el uso de memoria por la API, es posible desplegar el primero, limitando su uso de memoria, sin interferir con el funcionamiento del servicio DNS.
 
 La interfaz web ofrece la facilidad de interactuar con la configuración del servidor de nombres y manejar tanto las zonas como el conjunto de registros que estas poseen. Cada una de las funciones derivadas de la función \verb|save| propuesta es usada indirectamente para responder a las modificaciones realizadas desde la interfaz web. Al ofrecer una aplicación de página simple la navegación es fluida una vez cargada la página inicial. Adicionalmente, el diseño es responsivo lo que permite la configuración desde un teléfono móvil o pantallas pequeñas.

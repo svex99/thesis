@@ -14,15 +14,15 @@ Se hace necesario tener una alternativa a dicho mecanismo. DNS como base de dato
 
 DNS tiene una estructura arbórea, donde cada nodo tiene un padre y una etiqueta de 1 a 63 caracteres de longitud, excepto el nodo raíz que es su propio padre y contiene la cadena vacía [\cite{Vixie_2007}]. Un nombre de dominio puede verse como un nodo en este contexto, mientras que, un nombre de dominio completamente calificado (FQDN, por sus siglas en inglés) es una representación de nodos, separados por un punto (\verb+.+). Por ejemplo, \verb+www.example.com+ es el FQDN para el dominio \verb+www+, cuyo padre es \verb+example+, abuelo \verb+com+ (TLD, del inglés \textit{Top Level Domain}) y bisabuelo el nodo raíz.
 
-En la arquitectura actual encontramos lo dominios de más alto nivel (TLD) un nivel por debajo del nodo raíz. Estos son directamente gestionados por la IANA (\textit{Internet Assigned Numbers Authority}) y la lista se encuentra en la base de datos de la zona raíz\footnote{\url{https://www.iana.org/domains/root/db}}. La administración de los TLD es delegada a empresas y organizaciones en coordinación con la IANA para su mantenibilidad.
+En la arquitectura actual encontramos lo dominios de más alto nivel (TLD) un nivel por debajo del nodo raíz. Estos son directamente gestionados por la IANA (\textit{Internet Assigned Numbers Authority}) y la lista se encuentra en la base de datos de la zona raíz\footnote{\url{https://www.iana.org/domains/root/db}}. La administración de los TLD es delegada a empresas y organizaciones en coordinación con la IANA para su mantenibilidad. Estos se dividen en dos clases: TLD genéricos (gTLD), como son \verb|com|, \verb|edu|, \verb|biz|, y TLD de código de país, por ejemplo, \verb|uk|, \verb|jp|, \verb|cu|. Además, existe como TLD especial, \verb|arpa|, para el mapeo reverso de direcciones IP a nombres [\cite{pappas2004impact}].
 
 \begin{figure}[!ht]
     \centering
     \includegraphics[width=\linewidth]{draws/dns-arch.png}
-    \caption{Arquitectura de DNS.}
+    \caption{Jerarquía de DNS. La resolución de cada uno de los nodos del árbol depende de sus ancestros, partiendo del nodo raíz. Las líneas discontinuas indican los nodos a un mismo nivel dentro de la jerarquía.}
 \end{figure}
 
-Los nodos (dominios) son agrupados en zonas, las cuales pueden considerarse un área dentro del espacio de nombres. Siendo cada zona administrada por una organización o administrador determinado. La zonas son manejadas por servidores de autoridad, que pueden ser \textbf{primarios} (si la información de la zona tiene su origen fuera de DNS) o \textbf{secundarios} (la información tiene como origen un servidor primario, vía una transferencia de zona) [\cite{Vixie_2007}].
+Los nodos (dominios) son agrupados en zonas, las cuales pueden considerarse un área dentro del espacio de nombres. Siendo cada zona administrada por una organización o administrador determinado. La zonas son administradas por servidores de autoridad, que pueden ser \textbf{primarios} (si la información de la zona tiene su origen fuera de DNS) o \textbf{secundarios} (la información tiene como origen un servidor primario, vía una transferencia de zona) [\cite{Vixie_2007}].
 
 Cada nodo puede poseer registros (en inglés \textit{resource records} (RRs)). Estos son los que contienen toda la información DNS en dependencia de su nombre, tipo, clase o datos [\cite{rfc_1035}]. Cada RR tiene un TTL (\textit{time to live}), que indica el tiempo que puede estar almacenada la información del registro en un servidor secundario. Después de que este llegue a cero es necesario volver a obtener el registro del servidor autoritario primario.
 
@@ -33,7 +33,7 @@ Como resultado de disponer de una base de datos distribuida, un servidor puede r
 \begin{figure}[!ht]
     \centering
     \includegraphics[width=\linewidth]{draws/dns-query.png}
-    \caption{Resolución de una consulta DNS.}
+    \caption{Resolución de una consulta DNS. La consulta (\textit{DNS Query}) parte del cliente al \textit{resolver}, este, al no tenerla en caché, debe obtener de forma iterativa la respuesta, consultando a los servidores desde la raíz de la jerarquía. Una vez alcanzado un servidor autoritario para la consulta, se almacena en caché la respuesta (\textit{DNS Response}) y se envía al cliente.}
 \end{figure}
 
 De forma estándar una consulta está compuestas por un dominio objetivo (\verb|QNAME|), un tipo (\verb|QTYPE|) y una clase (\verb|QCLASS|). El servidor DNS usa el \verb|QTYPE| y \verb|QCLASS| para dar respuesta a la consulta con el conjunto de RR relevantes. En adición a los registros retornados, el servidor puede apuntar a otro servidor de nombres que tiene información relevante para la consulta, o útil para interpretar la información dada como respuesta.
@@ -58,7 +58,9 @@ Una vulnerabilidad de un sistema o una red es cualquier debilidad mediante la cu
 
 DNS en su diseño inicial no esta orientado a la seguridad. Fue creado cuando el tráfico en internet era mucho menor a lo que es ahora y la seguridad no era una de las consideraciones principales. Consecuencia de ello, cuando un \textit{resolver} le envía una petición a un servidor autoritario de zona, no tiene como verificar la autenticidad de la respuesta que recibe. Solo es posible verificar que la dirección IP coincida, pero este no es un mecanismo lo suficientemente fuerte para garantizar la autenticidad, pues la dirección IP puede ser falsificada.
 
-Como resultado de este diseño, DNS es vulnerable a muchos ataques. \textit{Cache poisoning} es una consecuencia directa de la ausencia de un mecanismo para verificar la autenticidad de una respuesta. Un \textit{resolver} puede almacenar en caché una respuesta que fue vulnerada, a partir de este punto responderá a la consulta posteriores con información comprometida, poniendo en peligro a los clientes. Otro riesgo es \textit{DNS Tunneling}, este se desarrolla cuando un atacante es capaz de ejecutar un malware que intercepte la comunicación entre el cliente y el \textit{resolver}. Dado que estas peticiones están autorizadas a pasar el cortafuegos, el atacante también puede pasar por este sin ser bloqueado [\cite{dns-tunneling}]. A la par existen amenazas que afectan este tipo de sistemas de forma general, principalmente ataques de denegación de servicios, ya sean DoS, DDoS (distribuidos) o DRDoS (reflexión distribuida) [\cite{dns-attacks}]. Un ataque de subdominios aleatorios también es un riesgo, consiste en realizar peticiones al servidor de dominios que no existen pero que pertenecen a la zona, gastando así el ancho de banda y los recursos de cómputo del servidor. Similar a este, un ataque de NXDOMAIN tiene como objetivo vulnerar la caché de un \textit{resolver} o servidor autoritario, realizando muchas consultas de dominios que no existen. La respuesta a estas es un registro NXDOMAIN que queda almacenado en caché, así puede llenarse la caché, eliminando información relevante, lo cual causa una demora para resolver las consultas de los clientes reales [\cite{dns-attacks-ident-prot}].
+Como resultado de este diseño, DNS es vulnerable a muchos ataques. \textit{Cache poisoning} es una consecuencia directa de la ausencia de un mecanismo para verificar la autenticidad de una respuesta. Un \textit{resolver} puede almacenar en caché una respuesta que fue vulnerada, a partir de este punto responderá a la consulta posteriores con información comprometida, poniendo en peligro a los clientes [\cite{nathan2012berkeley}]. Otro riesgo es \textit{DNS Tunneling}, este se desarrolla cuando un atacante es capaz de ejecutar un malware que intercepte la comunicación entre el cliente y el \textit{resolver} [\cite{kaminsky2004black}]. Dado que estas peticiones están autorizadas a pasar el cortafuegos, el atacante también puede pasar por este sin ser bloqueado [\cite{dns-tunneling}]. A la par existen amenazas que afectan este tipo de sistemas de forma general, principalmente ataques de denegación de servicios, ya sean DoS, DDoS (distribuidos) o DRDoS (reflexión distribuida) [\cite{dns-attacks}]. Un ataque de subdominios aleatorios también es un riesgo, consiste en realizar peticiones al servidor de dominios que no existen pero que pertenecen a la zona, gastando así el ancho de banda y los recursos de cómputo del servidor [\cite{bushart2018dns}]. Similar a este, un ataque de NXDOMAIN tiene como objetivo vulnerar la caché de un \textit{resolver} o servidor autoritario, realizando muchas consultas de dominios que no existen. La respuesta a estas es un registro NXDOMAIN que queda almacenado en caché, así puede llenarse la caché, eliminando información relevante, lo cual causa una demora para resolver las consultas de los clientes reales [\cite{dns-attacks-ident-prot}].
+
+Adicionalmente, las consultas de tipo \verb+ANY+ manipuladas y enviadas a cientos de \textit{resolvers} abiertos, con a la dirección IP de la víctima como objetivo de la respuesta, son un vector de ataque es eficaz para efectuar DDoS. Como resultado de la resolución efectiva los \textit{resolvers} envían un alto volumen de información a la víctima, excediendo su ancho de banda [\cite{dimitrov2020impacts}].
 
 Lógicamente, motivo de la importancia de DNS para las empresas y organizaciones con el auge del internet, fue necesario implementar mecanismos de seguridad que hicieran de DNS un sistema más seguro. En marzo de 2005 es publicado el RFC 4033 que propone un mecanismo, DNSSEC (\textit{Domain Name System Security Extensions}), para autenticar el origen de los datos y la integridad de estos ante una consulta. DNSSEC mejora la autenticación en DNS haciendo uso de firmas digitales basadas en criptografía de llave pública. Cada zona tiene un par de llaves pública y privada. El propietario de la zona hace uso de la llave privada para firmar la información DNS que envía, mientras que la llave pública es usada por el \textit{resolver} para validar la información recibida [\cite{new-approach-dnssec}].
 
@@ -76,7 +78,7 @@ Posee un amplio abanico de características empleadas en el sistema DNS actual y
 
 El DNS autoritario tiene soporte para DNSSEC, lo cual permite ponerlo en producción con un alto esquema de seguridad y que nodos hijos puedan implementar DNSSEC por igual. Este servidor puede tener diferentes roles de acuerdo a la arquitectura usada en el despliegue. Estos roles son Primario, Secundario y Secundario Stealth. Esta arquitectura es escalable: es posible tener un servidor primario (maestro), como fuente de información para la zona, y uno o más servidores secundarios (esclavos). De esta forma, los archivos de zona son actualizados en el servidor primario, mientras que los secundarios mantienen copias para responder a consultas.
 
-La transferencia de información entre los servidores de la zona puede ser originada por el servidor primario ante un cambio. Dicho servidor envía un mensaje de tipo \verb+NOTIFY+ a los servidores secundarios, así estos son enterados de que deben realizar una transferencia de zona. Esta transferencia es configurable y puede ser realizada tanto de forma parcial (AXFR), como incremental (IXFR), haciendo uso de TSIG estándar como mecanismo de seguridad.
+La transferencia de información entre los servidores de la zona puede ser originada por el servidor primario ante un cambio. Dicho servidor envía un mensaje de tipo \verb+NOTIFY+ a los servidores secundarios, así estos son enterados de que deben realizar una transferencia de zona. Esta transferencia es configurable y puede ser realizada tanto de forma parcial (AXFR), como incremental (IXFR), haciendo uso de TSIG\footnote{\url{https://www.rfc-editor.org/rfc/rfc2845}} estándar como mecanismo de seguridad [\cite{bind-zone-transfer}].
 
 Las consultas de tipo \verb+ANY+ pueden obtener más información de la que envían, lo que las hace eficaces para efectuar DDoS. El servidor autoritario tiene un mecanismo para protegerse ante esta amenaza, retornando un conjunto predefinido de registros y no todos. BIND 9 usa \textit{rate-limiting} como mecanismo para prevenir ataques de amplificación (un tipo de RDDoS), este puede ser configurado en las opciones o en el ámbito de una vista. Los ataques de amplificación pueden ser evitados con las DNS \textit{Cookies} [\cite{rfc_7873}], estas permiten evitar IPs falsificadas en las consultas y como consecuencia que el servidor no sea involucrado en un ataque de reflexión.
 
@@ -88,7 +90,7 @@ Ante cambios en la configuración de las zonas es posible reiniciar el servidor 
 
 El DNS \textit{resolver} en BIND también posee funcionalidades que lo hacen muy potente y seguro. DNSSEC viene incorporado y se puede activar de manera sencilla. En caso que exista un problema con el DNSSEC del servidor autoritario puede ser ejecutado el \textit{resolver} con este deshabilitado, haciendo uso de \textit{Negative Trust Anchors} [\cite{rfc_7646}].
 
-Uno de los aspectos más vulnerables y eficaces de los resolvers es la caché. El \textit{resolver} the BIND permite de forma flexible modificar los registros almacenados en caché. Esto puede resultar útil si los datos en caché son incorrectos o están desactualizados. Además, dispone de \textit{cache prefetch}, mecanismo que obtiene desde el servidor autoritario registros que son de frecuente acceso pero que tienen un TTL bajo, mejorando def forma efectiva los \textit{hits} en caché.
+Uno de los aspectos más vulnerables y a la vez positivos de los \textit{resolvers} es la caché. El \textit{resolver} the BIND permite de forma flexible modificar los registros almacenados en caché. Esto puede resultar útil si los datos en caché son incorrectos o están desactualizados. Además, dispone de \textit{cache prefetch}, mecanismo que obtiene desde el servidor autoritario registros que son de frecuente acceso pero que tienen un TTL bajo, mejorando def forma efectiva los \textit{hits} en caché.
 
 Para prevenir ataques DDoS el \textit{resolver} presenta dos opciones de configuración: \verb+fetches-per-zone+ y \verb+fetches-per-server+. Ambas limitan la cantidad de consultas a los servidores autoritarios que puedan estar bajo ataque y de esta forma mitigar la amenaza por la ruta del \textit{resolver}.
 
@@ -160,7 +162,7 @@ Buffalo es un ecosistema para el desarrollo web, actualmente en su version 1.0.1
               
 Echo se autoproclama de alto rendimiento, extensible y minimalista. Este \textit{framework} dispone de forma predeterminada de un amplio número de \textit{middlewares} que cubren muchos escenarios comunes en el desarrollo de una API o servidor HTML. Además de TLS (\textit{Transport Layer Security}) de forma automática, control de direcciones IP de clientes e integración con cualquier sistema de plantillas. La documentación contiene un índice de referencias con guías paso a paso para diferentes soluciones que se pueden implementar sobre \textit{framework}, siendo así un buen punto de consulta.
 
-Flamingo es un \textit{framework} bastante joven, cuenta con poco más de 300 estrellas en GitHub. Está más bien enfocado al desarrollo de aplicaciones \textit{full-stack} que a la implementacion de APIs. Dispone de un poderoso motor de plantillas, diseño orientado a microservicios y escalabilidad en el rendimiento. Además, posee un arsenal de características para la implementación de plataformas de comercio en línea, adaptables a las necesidades de negocio.
+Flamingo es un \textit{framework} bastante joven, cuenta con poco más de 300 estrellas en GitHub. Está más bien enfocado al desarrollo de aplicaciones \textit{full-stack} que a la implementación de APIs. Dispone de un poderoso motor de plantillas, diseño orientado a microservicios y escalabilidad en el rendimiento. Además, posee un arsenal de características para la implementación de plataformas de comercio en línea, adaptables a las necesidades de negocio.
 
 Finalmente Gin, con más de 63800 estrellas en GitHub es uno de los \textit{frameworks} más usados. Semejante a los anteriores, ofrece alto rendimiento, soporte para \textit{middlewares} y extensión de estas, y manejo de errores. Gin captura errores  de pánico y se recupera de estos, de esta forma el servidor siempre esta disponible. El soporte para validación de JSON viene integrado, así como la renderización de plantillas.
 
@@ -168,43 +170,37 @@ Puede concluirse que Go tiene un ambiente con bastas opciones para el desarrollo
 
 \subsection{Vue.js}
 
-Vue.js\footnote{\url{https://github.com/vuejs/core}} es un \textit{framework} progresivo de código abierto para crear interfaces de usuario en la web con Javascript [\cite{vue-docs}]. Es creado por Evan You después de trabajar para Google en varios proyectos con AngularJS. Vue tiene características similares a Angular, pero con una sintaxis más concisa y sencilla de usar. De igual forma ha adoptado ideas de otros \textit{frameworks} y bibliotecas como React.
+Vue.js\footnote{\url{https://github.com/vuejs/core}} es un \textit{framework} progresivo de código abierto para crear interfaces de usuario en la web con Javascript [\cite{vue-docs}]. Es creado por Evan You después de trabajar para Google en varios proyectos con AngularJS. Vue tiene características similares a Angular, pero con una sintaxis más concisa y sencilla de usar. De igual forma ha adoptado ideas de otros \textit{frameworks} y bibliotecas como React [\cite{ui-vue}].
 
 Ofrece un modelo de programación declarativo y basado en componentes que ayuda a desarrollar interfaces de usuario, tanto simples como complejas, de manera flexible. La comunidad ha desarrollado muchas bibliotecas opcionales que son activamente mantenidas, como son: Vue Router (enrutador para crear aplicaciones \textit{single-page}, SPA, por sus siglas en inglés), Pinia (biblioteca para manejo de estado), Vue Server Renderer (biblioteca para renderizado del lado del servidor), entre otras.
 
 El \textit{framework} ha ido cambiando de manera progresiva (como proclama su eslogan) y adoptando nuevas características. Con Vue 3 se introduce Compostion API como alternativa al estilo establecido por Options API. Ambos estilos son capaces de cubrir los casos de uso, sin embargo Option API esta desarrollada sobre Composition API. Por tal motivo, esta última ofrece más flexibilidad para crear patrones específicos a la hora de organizar el código y reusar la lógica.
 
+\begin{center}    
 \hspace{-0.65cm}\begin{minipage}{0.5\textwidth}
     \begin{lstlisting}[basicstyle=\ttfamily\tiny, numbers=none, caption=Options API.]
 <script>
 export default {
-// Properties returned from data() become reactive state
-// and will be exposed on `this`.
-data() {
-    return {
-    count: 0
+    data() {
+        return {
+            count: 0
+        }
+    },
+    methods: {
+        increment() {
+            this.count++
+        }
+    },
+    mounted() {
+        console.log(`Initial count is ${this.count}.`)
     }
-},
-
-// Methods are functions that mutate state and trigger updates.
-// They can be bound as event listeners in templates.
-methods: {
-    increment() {
-    this.count++
-    }
-},
-
-// Lifecycle hooks are called at different stages
-// of a component's lifecycle.
-// This function will be called when the component is mounted.
-mounted() {
-    console.log(`The initial count is ${this.count}.`)
-}
 }
 </script>
 
 <template>
-<button @click="increment">Count is: {{ count }}</button>
+    <button @click="increment">
+        Count is: {{ count }}
+    </button>
 </template>
     \end{lstlisting}
 \end{minipage}
@@ -213,25 +209,26 @@ mounted() {
 <script setup>
 import { ref, onMounted } from 'vue'
 
-// reactive state
 const count = ref(0)
 
-// functions that mutate state and trigger updates
 function increment() {
     count.value++
 }
 
-// lifecycle hooks
 onMounted(() => {
-    console.log(`The initial count is ${count.value}.`)
+    console.log(`Initial count is ${count.value}.`)
 })
 </script>
 
 <template>
-    <button @click="increment">Count is: {{ count }}</button>
+    <button @click="increment">
+        Count is: {{ count }}
+    </button>
 </template>
     \end{lstlisting}
 \end{minipage}
+\captionof{lstlisting}{Comparativa de los dos estilos que soporta Vue: Options API y Composition API. Composition API permite escribir un código más desacoplado para definir la componente, con un paradigma más imperativo.}
+\end{center}
 
 \subsubsection{Reactividad}
 
@@ -241,7 +238,7 @@ En vainilla Javascript no es posible detectar cuando una variable local es leíd
 
 \subsubsection{Enrutamiento} 
 
-El enrutamiento en el lado del cliente es uno de los puntos fuertes de Vue. Permite crear SPAs que ofrecen una navegación más fluida al no cargar el HTML completo de la página para cada vista. La biblioteca Vue Router es oficialmente soportada por Vue y ofrece completa funcionalidad para implementar la navegación en el lado del cliente.
+El enrutamiento en el lado del cliente es uno de los puntos fuertes de Vue. Permite crear SPAs que ofrecen una navegación más fluida al no cargar el HTML completo de la página para cada vista. La biblioteca Vue Router\footnote{\url{https://router.vuejs.org/}} es oficialmente soportada por Vue y ofrece completa funcionalidad para implementar la navegación en el lado del cliente.
 
 Las peticiones al servidor son realizadas de acuerdo a la componente que es cargada, dejando libre a este de tener que generar HTML. Por lo general, el servidor solo debe disponer de una API REST o similar para servir la información a la página web.
 
@@ -249,18 +246,18 @@ Las peticiones al servidor son realizadas de acuerdo a la componente que es carg
 
 Docker brinda la capacidad de empaquetar y ejecutar una aplicación en un entorno aislado llamado contenedor [\cite{docker-docs}]. Los contenedores son livianos y contienen todo lo necesario para ejecutar la aplicación, por lo que no usan las dependencias instaladas en el \textit{host}. Un contenedor es creado a partir de una imagen, y estas se pueden compartir fácilmente asegurando que todas las personas que la reciben obtengan una versión que funciona de la misma manera. Adicionalmente, permite manejar la infraestructura de la misma forma que se manejan las aplicaciones, lo que disminuye el tiempo entre escribir el código y llevarlo a producción.
 
-Docker hace especial uso de las características de Linux para el aislamiento de los contenedores, específicamente \verb|namespaces| para el aislamiento de los recursos del host y \verb|cgroups| para el control y limitación de esos recursos. A diferencia de una máquina virtual (MV), que realiza la virtualización sobre el hardware, un contenedor es un proceso corriendo en el sistema operativo, y como resultado se realiza la virtualización sobre este.
+Docker hace especial uso de las características de Linux para el aislamiento de los contenedores, específicamente \verb|namespaces| para el aislamiento de los recursos del host y \verb|cgroups| para el control y limitación de esos recursos [\cite{cg-and-ns-docker}]. A diferencia de una máquina virtual (MV), que realiza la virtualización sobre el hardware, un contenedor es un proceso corriendo en el sistema operativo, y como resultado se realiza la virtualización sobre este.
 
 \begin{figure}[!ht]
     \centering
     \includegraphics[width=\linewidth]{draws/cont-vs-vm.png}
-    \caption{Comparación del funcionamiento de los contenedores y las MV [\cite{docker-containers}].}
+    \caption{Comparación del funcionamiento de los contenedores y las MV. Los contenedores son una abstracción en la capa de aplicación que empaqueta las dependencias juntas. Por otra parte, las MV son una abstracción a nivel de hardware físico para convertir un servidor en varios [\cite{docker-containers}].}
 \end{figure}
 
 
 La adopción de Docker es notable. Existen alternativas como Podman, LXD, y Buildah; aun así, un número considerable de equipos y empresas escogen a Docker para la contenedorización de las aplicaciones [\cite{docker-usage}]. Este es de código abierto y gratis para proyectos de individuos, educación, pequeñas empresas y comunidades de código abierto.
 
-El entorno en que se encuentra Docker es muy rico: dispone de DockerHub\footnote{\url{https://hub.docker.com}}, un sitio para almacenar imágenes, tanto públicas como privadas, lo que ofrece rápido acceso desde cualquier computadora a una imagen que haya sido subida. Estos repositorios son usados por las principales empresas distribuidoras de software, por lo que se pueden obtener productos de software con todas sus dependencias, con solo una descarga. Válido mencionar que las principales tecnologías involucradas en este proyecto poseen imágenes en DockerHub: Golang, Node.js\footnote{\url{https://nodejs.org/en/}} para desplegar Vue.js, y los principales proveedores de DNS como BIND 9\footnote{\url{https://hub.docker.com/r/internetsystemsconsortium/bind9}}, PowerDNS\footnote{\url{https://hub.docker.com/u/powerdns}} y CoreDNS\footnote{\url{https://hub.docker.com/r/coredns/coredns/}}.
+El entorno en que se encuentra Docker es muy rico. Dispone de DockerHub\footnote{\url{https://hub.docker.com}}, un sitio para almacenar imágenes, tanto públicas como privadas, lo que ofrece rápido acceso desde cualquier computadora a una imagen que haya sido subida [\cite{merkel2014docker}]. Estos repositorios son usados por las principales empresas distribuidoras de software, por lo que se pueden obtener productos de software con todas sus dependencias, con solo una descarga. Válido mencionar que las principales tecnologías involucradas en este proyecto poseen imágenes en DockerHub: Golang, Node.js\footnote{\url{https://nodejs.org/en/}} para desplegar Vue.js, y los principales proveedores de DNS como BIND 9\footnote{\url{https://hub.docker.com/r/internetsystemsconsortium/bind9}}, PowerDNS\footnote{\url{https://hub.docker.com/u/powerdns}} y CoreDNS\footnote{\url{https://hub.docker.com/r/coredns/coredns/}}.
 
 Las imágenes de Docker tienen una arquitectura por capas, una se construye sobre las otra. Así, si dos imágenes tienen una capa en común, dicha capa no se almacena de forma duplicada en disco y comparten ambas la misma. Los contenedores pueden persistir información en volúmenes, los cuales son sumamente portables, incluso entre sistemas operativos. La comunicación entre los servicios (contenedores) de Docker está aislada al sistema, y se debe especificar los puertos que se necesiten exponer para dar acceso al exterior. Estos también pueden ser orquestados con Docker Swarm\footnote{\url{https://docs.docker.com/engine/swarm/}} o Kubernetes\footnote{\url{https://kubernetes.io/es/}}, lo que permite escalabilidad en producción acorde a las necesidades de cada servicio.
 

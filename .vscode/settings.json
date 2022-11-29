@@ -25,6 +25,13 @@
         "**/*.pdf_tex": true
     },
     "cSpell.words": [
-        "Páez"
+        "dnstap",
+        "goroutines",
+        "gorutinas",
+        "loguear",
+        "middlewares",
+        "Páez",
+        "Pinia",
+        "rndc"
     ]
 }

@@ -11,7 +11,7 @@ Como propuesta de solución a la implementación de una API para los diferentes 
 \begin{figure}[!ht]
     \centering
     \includegraphics[width=\linewidth]{draws/proposal.png}
-    \caption{Arquitectura de la propuesta.}
+    \caption{Arquitectura de la propuesta. La API HTTP sirve como interfaz al sistema de almacenamiento del servidor DNS. Las funciones \textbf{load} y \textbf{save} interactúan de forma directa con el sistema de almacenamiento para leer y escribir la información DNS, respectivamente. La interfaz de comunicación tiene como objetivo poder actualizar o consultar el estado del servidor de forma remota.}
 \end{figure}
 
 La hipótesis teórica se basa en dos funciones: \verb+load+ para la lectura de los archivos de configuración desde un sistema de almacenamiento y \verb+save+ para la persistencia de los cambios realizados a dicho sistema. Estas funciones expuestas en una API HTTP, o similar, permiten realizar las funciones fundamentales de configuración sobre el servidor DNS.

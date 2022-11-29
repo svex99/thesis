@@ -1,13 +1,19 @@
 \begin{resumen}
-El sistema DNS ha sido de vital importancia para el desarrollo del internet a nivel global. Las diferentes organizaciones hacen uso de este para gestionar su presencia en línea y los servicios que ofrecen. En este ambiente, existen diferentes soluciones de código abierto que funcionan como servidores autoritarios pero que no disponen de una API HTTP para el manejo de la configuración.
+El sistema DNS ha sido de vital importancia para el desarrollo del internet a nivel global. Las diferentes organizaciones hacen uso de este para gestionar su presencia en línea y los servicios que ofrecen. En este ambiente, existen diferentes soluciones de código abierto que funcionan como servidores autoritarios, pero que no disponen de una API HTTP para el manejo de la configuración.
 
-Por esto, en este trabajo se propone una arquitectura aplicable a los diferentes servidores de nombres de código abierto para implementar una API HTTP sobre ellos. Esta propuesta se implementa sobre BIND 9, servidor de nombres empleado en la Universidad de La Habana. La implementación se extiende con una interfaz web y un ambiente de microservicios sobre Docker para la puesta en producción.
+Por esto, en este trabajo se propone una arquitectura aplicable a los diferentes servidores de nombres de código abierto para implementar una API HTTP sobre ellos. Esta propuesta se implementa sobre BIND 9, servidor de nombres empleado en la Universidad de La Habana y ampliamente utilizado de forma general. La implementación se extiende con una interfaz web y un ambiente de microservicios sobre Docker para la puesta en producción.
 
-Sobre BIND 9 se implementa una API REST que mantiene en memoria la configuración DNS. La escritura y carga de la configuración DNS se basa en la propuesta genérica y hace uso de \textit{parsers} con la sintaxis de BIND 9 para la lectura y escritura estructurada a disco. Para aplicar los cambios en tiempo de ejecución sobre BIND 9 se usa la herramienta \verb|rdnc| recomendada por el software.
+Sobre BIND 9 se implementa una API REST que mantiene en memoria la configuración DNS. La escritura y carga de la configuración DNS se basa en la propuesta genérica y hace uso de \textit{parsers} generados a partir de la sintaxis de BIND 9 para la lectura y escritura estructurada a disco. Para aplicar los cambios en tiempo de ejecución sobre BIND 9 es empleada la herramienta \verb|rdnc| a través de la API de Docker.
 
 Teniendo en cuenta la especificidad del sistema DNS por la cual se rigen los diferentes productos de software, y las características comunes que estos tienen con BIND 9, se comprueba la efectividad de la propuesta inicial. Además, se valida que la solución implementada es aplicable en la Universidad de La Habana, para facilitar la configuración del servidor de nombres.
 \end{resumen}
 
 \begin{abstract}
-	Resumen en inglés
+The DNS system has been of vital importance for the development of the internet globally. Different organizations make use of it to manage their online presence and the services they offer. In this environment, there are different open source solutions that function as authoritative servers, but do not have an HTTP API for configuration management.
+
+For this reason, in this work is proposed an architecture applicable to the different open source name servers to implement a HTTP API on them. This proposal is implemented on BIND 9, a name server used at the University of Havana and widely used in general. The implementation is extended with a web interface and a microservices environment on top of Docker for production.
+
+On top of BIND 9, a REST API is implemented that keeps the DNS configuration in memory. The writing and loading of the DNS configuration is based on the generic approach and makes use of \textit{parsers} generated from the BIND 9 syntax for structured reading and writing to disk. To apply runtime changes to BIND 9, the \verb|rdnc| command line tool is used through the Docker API.
+
+Taking into account the specificity of the DNS system by which the different software products are governed, and the common characteristics that these have with BIND 9, the effectiveness of the initial proposal is verified. In addition, it is validated that the implemented solution is applicable at the University of Havana, to facilitate the configuration of the name server.
 \end{abstract}
